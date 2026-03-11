@@ -1,0 +1,23 @@
+{
+    "name": "TowerDefense",
+    "rootNamespace": "TowerDefense",
+    "references": [
+        "Unity.Entities",
+        "Unity.Collections",
+        "Unity.Burst",
+        "Unity.Mathematics",
+        "Unity.Transforms",
+        "UnitySystemArchitecture",
+        "Core",
+        "MemoryPack.Unity"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": true,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

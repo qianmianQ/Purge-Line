@@ -1,0 +1,19 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 0}
+  m_Name: GridRenderConfig
+  m_EditorClassIdentifier: TowerDefense:TowerDefense.Systems:GridRenderConfig
+  QuadMesh: {fileID: 0}
+  SolidMaterial: {fileID: 2100000, guid: 7490ffe3d17b242a790326aea2bd3d80, type: 2}
+  WalkableMaterial: {fileID: 2100000, guid: 28255b31d797b420e81218afd9063d6f, type: 2}
+  PlaceableMaterial: {fileID: 2100000, guid: dda355820ee054c7da0a516f2d32057b, type: 2}
+  CompositeMaterial: {fileID: 2100000, guid: b86a929d5b4cb4cf399580f400b7d7a8, type: 2}

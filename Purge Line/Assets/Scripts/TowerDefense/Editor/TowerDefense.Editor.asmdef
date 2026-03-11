@@ -1,0 +1,22 @@
+{
+    "name": "TowerDefense.Editor",
+    "rootNamespace": "TowerDefense.Editor",
+    "references": [
+        "TowerDefense",
+        "Unity.Entities",
+        "Unity.Collections",
+        "Unity.Mathematics"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": true,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
+
