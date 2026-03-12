@@ -65,26 +65,32 @@ namespace TowerDefense.Systems
             }
 
             var goalBuffer = state.EntityManager.GetBuffer<FlowFieldGoal>(singletonEntity, true);
-            if (goalBuffer.Length == 0)
+            int goalCount = goalBuffer.Length;
+            if (goalCount == 0)
             {
                 _logger.LogWarning("[FlowFieldBakeSystem] No goal points defined, skipping bake");
                 state.EntityManager.RemoveComponent<FlowFieldBakeRequest>(singletonEntity);
                 return;
             }
 
+            // 立即将 buffer 数据拷贝到 NativeArray
+            // 避免后续 EntityManager 调用（HasComponent / GetComponentData 等）
+            // 使 DynamicBuffer 的 safety handle 失效，引发 ObjectDisposedException
+            var goals = new NativeArray<int2>(goalCount, Allocator.TempJob);
+            for (int i = 0; i < goalCount; i++)
+                goals[i] = goalBuffer[i].GridCoord;
+            // goalBuffer 在此之后不再使用
+
             // 尝试使用预烘焙数据
-            if (TryUseBakedData(ref state, singletonEntity, mapData, goalBuffer))
+            if (TryUseBakedData(ref state, singletonEntity, mapData, goalCount))
             {
+                goals.Dispose();
                 state.EntityManager.RemoveComponent<FlowFieldBakeRequest>(singletonEntity);
                 return;
             }
 
             int cellCount = mapData.Width * mapData.Height;
 
-            // 准备 BFS 输入
-            var goals = new NativeArray<int2>(goalBuffer.Length, Allocator.TempJob);
-            for (int i = 0; i < goalBuffer.Length; i++)
-                goals[i] = goalBuffer[i].GridCoord;
 
             // 从 BlobAsset 复制格子数据到可写 NativeArray
             ref var blobData = ref mapData.BlobData.Value;
@@ -125,12 +131,12 @@ namespace TowerDefense.Systems
                 BlobData = blobRef,
                 DataHash = dataHash,
                 AlgorithmVersion = LevelConfig.FlowFieldAlgorithmVersion,
-                GoalCount = goalBuffer.Length
+                GoalCount = goalCount
             });
 
             _logger.LogInformation(
                 "[FlowFieldBakeSystem] Flow field baked: {0}x{1}, {2} goals",
-                mapData.Width, mapData.Height, goalBuffer.Length);
+                mapData.Width, mapData.Height, goalCount);
 
             // 清理
             goals.Dispose();
@@ -144,7 +150,7 @@ namespace TowerDefense.Systems
         }
 
         private bool TryUseBakedData(ref SystemState state, Entity entity,
-            GridMapData mapData, DynamicBuffer<FlowFieldGoal> goalBuffer)
+            GridMapData mapData, int goalCount)
         {
             // 检查 SharedLevelDataStore 中是否有预烘焙数据
             // 这里通过检查已有的 FlowFieldData 组件版本来判断
@@ -157,7 +163,7 @@ namespace TowerDefense.Systems
                 return false;
             if (existing.AlgorithmVersion != LevelConfig.FlowFieldAlgorithmVersion)
                 return false;
-            if (existing.GoalCount != goalBuffer.Length)
+            if (existing.GoalCount != goalCount)
                 return false;
 
             _logger.LogInformation("[FlowFieldBakeSystem] Using pre-baked flow field data");

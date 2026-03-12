@@ -9,8 +9,7 @@ using TowerDefense.Utilities;
 using Unity.Collections;
 using Unity.Entities;
 using Unity.Mathematics;
-using UnitySystemArchitecture.Core;
-using ISystem = UnitySystemArchitecture.Core.ISystem;
+using UnityDependencyInjection;
 
 namespace TowerDefense.Bridge
 {
@@ -27,7 +26,7 @@ namespace TowerDefense.Bridge
     ///   GameFramework.Initialize() → SystemManager.Register<GridBridgeSystem>()
     ///   → OnInit() → OnStart() → LoadLevel() → ...
     /// </summary>
-    public class GridBridgeSystem : ISystem, IStart
+    public class GridBridgeSystem : IInitializable, IStartable
     {
         private static ILogger _logger;
 
@@ -162,7 +161,7 @@ namespace TowerDefense.Bridge
             _logger.LogInformation("[GridBridgeSystem] Level load requested: {0} ({1}x{2}), Goals={3}",
                 config.LevelId, config.Width, config.Height, config.GoalPoints?.Length ?? 0);
             
-            GameEventSystem.Gameplay.Dispatch(new GridMapLoadedEvent{
+            EventManager.Gameplay.Dispatch(new GridMapLoadedEvent{
                     LevelId = config.LevelId,
                     Width = config.Width,
                     Height = config.Height,
@@ -234,7 +233,7 @@ namespace TowerDefense.Bridge
 
             if (success)
             {
-                GameEventSystem.Gameplay.Dispatch(new GridCellChangedEvent
+                EventManager.Gameplay.Dispatch(new GridCellChangedEvent
                 {
                     GridCoord = gridCoord,
                     ChangeType = CellChangeType.TowerPlaced,
@@ -257,7 +256,7 @@ namespace TowerDefense.Bridge
 
             if (success)
             {
-                GameEventSystem.Gameplay.Dispatch(new GridCellChangedEvent
+                EventManager.Gameplay.Dispatch(new GridCellChangedEvent
                 {
                     GridCoord = gridCoord,
                     ChangeType = CellChangeType.TowerRemoved,

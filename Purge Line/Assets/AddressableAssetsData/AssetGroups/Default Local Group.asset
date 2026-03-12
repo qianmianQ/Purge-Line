@@ -17,6 +17,26 @@ MonoBehaviour:
     m_SerializedData: []
   m_GUID: ae553f3f6957d45b0b252b2aaa48ea02
   m_SerializeEntries:
+  - m_GUID: 3eb41205785a74bf899c20156c584295
+    m_Address: Assets/Prefabs/UI/Scene UI/ui tip.prefab
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 76668507e30bd47e7aed6107208a010a
+    m_Address: Assets/Prefabs/Gameplay/Enemies/Enemy Entity.prefab
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 7a8cf211db061474088485ff0c501ba4
+    m_Address: Assets/Prefabs/Gameplay/Towers/Tower Entity.prefab
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: bb7b740026ebb4f469101d6b2b50dab4
+    m_Address: Assets/Prefabs/Gameplay/Bullet.prefab
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: eed809c01a99443eead895c62a0c2c91
     m_Address: Assets/Data/Levels/level_01.bytes
     m_ReadOnly: 0

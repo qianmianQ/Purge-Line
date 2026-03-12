@@ -5,7 +5,8 @@
         "UnitySystemArchitecture",
         "ZLogger.Unity",
         "MemoryPack.Unity",
-        "Base"
+        "Base",
+        "Unity.Addressables"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

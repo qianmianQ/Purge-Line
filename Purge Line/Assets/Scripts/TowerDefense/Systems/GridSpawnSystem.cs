@@ -56,6 +56,12 @@ namespace TowerDefense.Systems
         {
             var ecb = new EntityCommandBuffer(Allocator.Temp);
 
+            // 必须在 Query 迭代之前清理旧 singleton：
+            // EntityManager.DestroyEntity 是结构性变更，在 foreach 内部调用会抛出
+            // InvalidOperationException，同时导致 ECB 未 Playback，
+            // 请求实体残留，下一帧 Consume 时数据已不存在（LevelConfig not found）。
+            CleanupExistingSingleton(ref state);
+
             foreach (var (request, entity) in
                      SystemAPI.Query<RefRO<GridSpawnRequest>>().WithEntityAccess())
             {
@@ -75,8 +81,6 @@ namespace TowerDefense.Systems
                 // 构建 BlobAsset
                 var blobRef = BuildBlobAsset(levelConfig);
 
-                // 清理旧的 singleton（如果存在）
-                CleanupExistingSingleton(ref state);
 
                 // 创建 singleton entity
                 var singletonEntity = ecb.CreateEntity();

@@ -1,9 +1,11 @@
 using System;
 using Base.BaseSystem.EventSystem;
 using UnityEngine;
-using UnitySystemArchitecture.Manager;
+using UnityDependencyInjection;
 using Microsoft.Extensions.Logging;
 using PurgeLine.Events;
+using PurgeLine.Resource;
+using PurgeLine.Resource.Internal;
 using TowerDefense.Bridge;
 using ZLogger;
 using ZLogger.Providers;
@@ -74,29 +76,36 @@ public class GameFramework : MonoBehaviour
 
         _logger.LogInformation("Framework starting...");
         
-        GameEventSystem.Init(typeof(UIEvent), typeof(GamePlayEvent), typeof(GlobalEvent));
+        EventManager.Init(typeof(UIEvent), typeof(GamePlayEvent), typeof(GlobalEvent));
         _logger.LogInformation("Event system initialized");
 
-        // 创建 SystemManager（与 GameFramework 同生命周期的独立 GameObject）
-        var smGo = new GameObject("[SystemManager]")
+        // 创建 DependencyManager（与 GameFramework 同生命周期的独立 GameObject）
+        var smGo = new GameObject("[DependencyManager]")
         {
             transform =
             {
                 parent = transform.parent
             }
         };
-        var sm = smGo.AddComponent<SystemManager>(); // 立即触发 SystemManager.Awake()，设置单例
+        var sm = smGo.AddComponent<DependencyManager>(); // 立即触发 DependencyManager.Awake()，设置单例
 
-        // 连接 SystemManager 的日志到 GameLogger
-        var smLogger = GameLogger.Create<SystemManager>();
-        SystemManager.SetLogger(smLogger);
+        // 连接 DependencyManager 的日志到 GameLogger
+        var smLogger = GameLogger.Create<DependencyManager>();
+        DependencyManager.SetLogger(smLogger);
 
         Initialize();
     }
 
     private void Start()
     {
-        SystemManager.Instance.Get<GridBridgeSystem>().LoadLevel("level_01");
+        
+        //等待3秒加载关卡
+        Invoke(nameof(StartGame), 3f);
+    }
+
+    private void StartGame()
+    {
+        DependencyManager.Instance.Get<GridBridgeSystem>().LoadLevel("level_01");
     }
 
     private void OnDestroy()
@@ -104,7 +113,7 @@ public class GameFramework : MonoBehaviour
         if (Instance != this) return;
 
         _logger.LogInformation("Framework destroyed");
-        GameEventSystem.Dispose();
+        EventManager.Dispose();
         GameLogger.Dispose();
         Instance = null;
     }
@@ -117,11 +126,21 @@ public class GameFramework : MonoBehaviour
     /// </summary>
     public void Initialize()
     {
-        var sm = SystemManager.Instance;
+        var sm = DependencyManager.Instance;
 
+        // 资源管理器 — 基础设施，必须最先注册
+        sm.Register(new ResourceManager(ResourceManagerConfig.Default));
+
+        // 网格桥接系统 — 地图管理
         sm.Register(new GridBridgeSystem());
 
-        _logger.LogInformation("All systems registered, framework running");
+        // 战斗桥接系统 — ECS 战斗初始化 + 炮塔创建 API
+        sm.Register(new CombatBridgeSystem());
+
+        // 炮塔放置系统 — 输入处理 + 虚影显示
+        sm.Register(new TowerPlacementSystem());
+
+        _logger.LogInformation("All dependency registered, framework running");
     }
 
     // ── 内部工具 ──────────────────────────────────────────────

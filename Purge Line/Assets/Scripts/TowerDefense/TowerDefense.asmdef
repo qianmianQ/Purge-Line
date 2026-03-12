@@ -11,7 +11,9 @@
         "MemoryPack.Unity",
         "Base",
         "Core",
-        "ZLogger.Unity"
+        "ZLogger.Unity",
+        "Core.ResourceSystem",
+        "Unity.InputSystem"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

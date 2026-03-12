@@ -1,0 +1,23 @@
+{
+    "name": "Core.ResourceSystem",
+    "rootNamespace": "PurgeLine.Resource",
+    "references": [
+        "GUID:e48081361381e494caf1bef94ae3566d",
+        "GUID:2b78dc61ba35e42c39ba2aabce11b6c4",
+        "GUID:9e24947de15b9834991c9d8411ea37cf",
+        "GUID:84651a3751eca9349aac36a66bba901b",
+        "GUID:77221876cc6b8244180b96e320b1bcd4",
+        "GUID:88effc0ddf75e46279146523e44eaed4",
+        "GUID:f51ebe6a0ceec4240a699833d6309b23",
+        "GUID:593a5b492d29ac6448b1ebf7f035ef33"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
