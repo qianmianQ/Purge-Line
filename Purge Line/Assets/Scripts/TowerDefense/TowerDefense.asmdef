@@ -8,8 +8,10 @@
         "Unity.Mathematics",
         "Unity.Transforms",
         "UnitySystemArchitecture",
+        "MemoryPack.Unity",
+        "Base",
         "Core",
-        "MemoryPack.Unity"
+        "ZLogger.Unity"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

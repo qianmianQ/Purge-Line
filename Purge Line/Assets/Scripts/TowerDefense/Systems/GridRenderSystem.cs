@@ -73,6 +73,8 @@ namespace TowerDefense.Systems
 
         public void OnUpdate(ref SystemState state)
         {
+            //暂时取消渲染系统
+            return;
             if (!_resourcesInitialized) return;
             if (!SystemAPI.HasSingleton<GridMapData>()) return;
 
@@ -121,8 +123,8 @@ namespace TowerDefense.Systems
                     var cellType = (CellType)cells[index];
                     if (cellType == CellType.None) continue;
 
-                    float2 worldCenter = GridMath.GridToWorld(
-                        new int2(x, y), origin, cellSize);
+                    GridMath.GridToWorld(
+                        new int2(x, y), origin, cellSize, out float2 worldCenter);
 
                     var matrix = Matrix4x4.TRS(
                         new Vector3(worldCenter.x, worldCenter.y, 0f),

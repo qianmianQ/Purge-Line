@@ -1,9 +1,12 @@
+using Base.BaseSystem.EventSystem;
 using Microsoft.Extensions.Logging;
+using PurgeLine.Events;
 using R3;
 using TowerDefense.Components;
 using TowerDefense.Data;
 using TowerDefense.Systems;
 using TowerDefense.Utilities;
+using Unity.Collections;
 using Unity.Entities;
 using Unity.Mathematics;
 using UnitySystemArchitecture.Core;
@@ -16,8 +19,9 @@ namespace TowerDefense.Bridge
     ///
     /// 注册到 SystemManager 的托管系统，提供：
     /// 1. 关卡加载触发（创建 GridSpawnRequest ECS entity）
-    /// 2. R3 响应式事件流（MapLoaded, CellChanged）
+    /// 2. R3 响应式事件流（MapLoaded, CellChanged, FlowFieldBaked）
     /// 3. 面向业务层的查询 API
+    /// 4. 流场管理（触发重新烘焙等）
     ///
     /// 生命周期：
     ///   GameFramework.Initialize() → SystemManager.Register<GridBridgeSystem>()
@@ -31,17 +35,6 @@ namespace TowerDefense.Bridge
 
         private World _ecsWorld;
 
-        // ── R3 事件流 ─────────────────────────────────────────
-
-        private readonly Subject<GridMapLoadedEvent> _mapLoadedSubject = new Subject<GridMapLoadedEvent>();
-        private readonly Subject<GridCellChangedEvent> _cellChangedSubject = new Subject<GridCellChangedEvent>();
-
-        /// <summary>地图加载完成事件</summary>
-        public Observable<GridMapLoadedEvent> OnMapLoaded => _mapLoadedSubject;
-
-        /// <summary>格子状态变更事件</summary>
-        public Observable<GridCellChangedEvent> OnCellChanged => _cellChangedSubject;
-
         // ── 状态 ──────────────────────────────────────────────
 
         /// <summary>当前加载的关卡ID</summary>
@@ -49,6 +42,20 @@ namespace TowerDefense.Bridge
 
         /// <summary>是否已加载地图</summary>
         public bool IsMapLoaded { get; private set; }
+
+        /// <summary>流场是否已就绪</summary>
+        public bool IsFlowFieldReady
+        {
+            get
+            {
+                if (_ecsWorld == null || !_ecsWorld.IsCreated) return false;
+                var em = _ecsWorld.EntityManager;
+                using var query = em.CreateEntityQuery(ComponentType.ReadOnly<FlowFieldData>());
+                if (query.IsEmpty) return false;
+                var ffData = query.GetSingleton<FlowFieldData>();
+                return ffData.BlobData.IsCreated;
+            }
+        }
 
         // ── ISystem 生命周期 ──────────────────────────────────
 
@@ -72,8 +79,6 @@ namespace TowerDefense.Bridge
 
         public void OnDispose()
         {
-            _mapLoadedSubject.Dispose();
-            _cellChangedSubject.Dispose();
             SharedLevelDataStore.Clear();
             _logger.LogInformation("[GridBridgeSystem] Disposed");
         }
@@ -154,18 +159,43 @@ namespace TowerDefense.Bridge
             CurrentLevelId = config.LevelId;
             IsMapLoaded = true;
 
-            _logger.LogInformation("[GridBridgeSystem] Level load requested: {0} ({1}x{2})",
-                config.LevelId, config.Width, config.Height);
+            _logger.LogInformation("[GridBridgeSystem] Level load requested: {0} ({1}x{2}), Goals={3}",
+                config.LevelId, config.Width, config.Height, config.GoalPoints?.Length ?? 0);
+            
+            GameEventSystem.Gameplay.Dispatch(new GridMapLoadedEvent{
+                    LevelId = config.LevelId,
+                    Width = config.Width,
+                    Height = config.Height,
+                    CellSize = config.CellSize
+                });
 
-            // 发布事件
-            _mapLoadedSubject.OnNext(new GridMapLoadedEvent
+            return true;
+        }
+
+        // ── 流场管理 ─────────────────────────────────────────
+
+        /// <summary>
+        /// 触发流场重新烘焙（例如障碍物变化后调用）
+        /// </summary>
+        public bool RebakeFlowField()
+        {
+            if (_ecsWorld == null || !_ecsWorld.IsCreated) return false;
+
+            var em = _ecsWorld.EntityManager;
+            using var query = em.CreateEntityQuery(ComponentType.ReadOnly<GridMapData>());
+            if (query.IsEmpty)
             {
-                LevelId = config.LevelId,
-                Width = config.Width,
-                Height = config.Height,
-                CellSize = config.CellSize
-            });
+                _logger.LogWarning("[GridBridgeSystem] Cannot rebake: no GridMapData");
+                return false;
+            }
 
+            var entity = query.GetSingletonEntity();
+            if (!em.HasComponent<FlowFieldBakeRequest>(entity))
+            {
+                em.AddComponent<FlowFieldBakeRequest>(entity);
+            }
+
+            _logger.LogInformation("[GridBridgeSystem] Flow field rebake requested");
             return true;
         }
 
@@ -204,7 +234,7 @@ namespace TowerDefense.Bridge
 
             if (success)
             {
-                _cellChangedSubject.OnNext(new GridCellChangedEvent
+                GameEventSystem.Gameplay.Dispatch(new GridCellChangedEvent
                 {
                     GridCoord = gridCoord,
                     ChangeType = CellChangeType.TowerPlaced,
@@ -227,7 +257,7 @@ namespace TowerDefense.Bridge
 
             if (success)
             {
-                _cellChangedSubject.OnNext(new GridCellChangedEvent
+                GameEventSystem.Gameplay.Dispatch(new GridCellChangedEvent
                 {
                     GridCoord = gridCoord,
                     ChangeType = CellChangeType.TowerRemoved,
@@ -259,7 +289,8 @@ namespace TowerDefense.Bridge
             if (query.IsEmpty) return default;
 
             var mapData = query.GetSingleton<GridMapData>();
-            return GridMath.WorldToGrid(worldPos, mapData.Origin, mapData.CellSize);
+            GridMath.WorldToGrid(worldPos, mapData.Origin, mapData.CellSize, out int2 result);
+            return result;
         }
 
         /// <summary>
@@ -274,35 +305,9 @@ namespace TowerDefense.Bridge
             if (query.IsEmpty) return default;
 
             var mapData = query.GetSingleton<GridMapData>();
-            return GridMath.GridToWorld(gridCoord, mapData.Origin, mapData.CellSize);
+            GridMath.GridToWorld(gridCoord, mapData.Origin, mapData.CellSize, out float2 result);
+            return result;
         }
-    }
-
-    // ── 事件定义 ──────────────────────────────────────────────
-
-    /// <summary>地图加载完成事件</summary>
-    public struct GridMapLoadedEvent
-    {
-        public string LevelId;
-        public int Width;
-        public int Height;
-        public float CellSize;
-    }
-
-    /// <summary>格子状态变更事件</summary>
-    public struct GridCellChangedEvent
-    {
-        public int2 GridCoord;
-        public CellChangeType ChangeType;
-        public Entity Entity;
-    }
-
-    /// <summary>格子变更类型</summary>
-    public enum CellChangeType
-    {
-        TowerPlaced,
-        TowerRemoved,
-        TypeChanged
     }
 }
 

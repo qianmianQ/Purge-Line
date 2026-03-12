@@ -41,3 +41,63 @@ TagManager:
   - name: Default
     uniqueID: 0
     locked: 0
+  - name: Map
+    uniqueID: 1617261615
+    locked: 0
+  - name: New Layer 2
+    uniqueID: 1513037807
+    locked: 0
+  - name: New Layer 3
+    uniqueID: 1268073353
+    locked: 0
+  - name: New Layer 4
+    uniqueID: 2583334903
+    locked: 0
+  - name: New Layer 5
+    uniqueID: 1749719867
+    locked: 0
+  - name: GamePlay1
+    uniqueID: 2754824855
+    locked: 0
+  - name: GamePlay2
+    uniqueID: 2305470329
+    locked: 0
+  - name: GamePlay3
+    uniqueID: 3796119411
+    locked: 0
+  - name: GamePlay4
+    uniqueID: 901054671
+    locked: 0
+  - name: GamePlay5
+    uniqueID: 3444429779
+    locked: 0
+  - name: New Layer 11
+    uniqueID: 693940899
+    locked: 0
+  - name: New Layer 12
+    uniqueID: 3651151109
+    locked: 0
+  - name: New Layer 13
+    uniqueID: 1388791937
+    locked: 0
+  - name: New Layer 14
+    uniqueID: 3033561629
+    locked: 0
+  - name: New Layer 15
+    uniqueID: 3021416557
+    locked: 0
+  - name: New Layer 16
+    uniqueID: 1754847315
+    locked: 0
+  - name: New Layer 17
+    uniqueID: 4291421047
+    locked: 0
+  - name: New Layer 18
+    uniqueID: 1491757419
+    locked: 0
+  - name: New Layer 19
+    uniqueID: 1617949377
+    locked: 0
+  - name: GamePlay UI
+    uniqueID: 1338490021
+    locked: 0

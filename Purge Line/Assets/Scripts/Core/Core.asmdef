@@ -4,7 +4,8 @@
     "references": [
         "UnitySystemArchitecture",
         "ZLogger.Unity",
-        "MemoryPack.Unity"
+        "MemoryPack.Unity",
+        "Base"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

@@ -1,5 +1,6 @@
 using System;
 using MemoryPack;
+using UnityEngine;
 
 namespace TowerDefense.Data
 {
@@ -19,6 +20,9 @@ namespace TowerDefense.Data
     [MemoryPackable]
     public partial class LevelConfig
     {
+        /// <summary>当前流场算法版本，变更时递增以使旧烘焙数据失效</summary>
+        public const int FlowFieldAlgorithmVersion = 1;
+
         /// <summary>关卡唯一标识符</summary>
         public string LevelId { get; set; }
 
@@ -47,17 +51,28 @@ namespace TowerDefense.Data
         /// </summary>
         public byte[] Cells { get; set; }
 
-        /// <summary>敌人出生点坐标列表（格式："x,y"）— 预留扩展</summary>
-        public string[] SpawnPoints { get; set; }
+        /// <summary>敌人出生点（格子坐标，x=列 y=行）</summary>
+        public Vector2[] SpawnPoints { get; set; }
 
-        /// <summary>目标点坐标列表（格式："x,y"）— 预留扩展</summary>
-        public string[] GoalPoints { get; set; }
+        /// <summary>目标点（格子坐标，x=列 y=行）</summary>
+        public Vector2[] GoalPoints { get; set; }
 
         /// <summary>关卡显示名称（可选）</summary>
         public string DisplayName { get; set; }
 
         /// <summary>关卡描述（可选）</summary>
         public string Description { get; set; }
+
+        // ── 预烘焙流场（可选持久化）───────────────────────────
+
+        /// <summary>预烘焙的流场方向数据（每格一个byte，0-7=方向，255=无方向）</summary>
+        public byte[] BakedFlowFieldDirections { get; set; }
+
+        /// <summary>烘焙时的网格+目标点数据哈希（用于失效校验）</summary>
+        public uint BakedFlowFieldDataHash { get; set; }
+
+        /// <summary>烘焙时的算法版本号</summary>
+        public int BakedFlowFieldVersion { get; set; }
 
         // ── 工厂方法 ─────────────────────────────────────────
 
@@ -90,10 +105,13 @@ namespace TowerDefense.Data
                 OriginX = 0f,
                 OriginY = 0f,
                 Cells = cells,
-                SpawnPoints = Array.Empty<string>(),
-                GoalPoints = Array.Empty<string>(),
+                SpawnPoints = Array.Empty<Vector2>(),
+                GoalPoints = Array.Empty<Vector2>(),
                 DisplayName = levelId,
-                Description = string.Empty
+                Description = string.Empty,
+                BakedFlowFieldDirections = null,
+                BakedFlowFieldDataHash = 0,
+                BakedFlowFieldVersion = 0
             };
         }
 
@@ -157,6 +175,53 @@ namespace TowerDefense.Data
 
             error = null;
             return true;
+        }
+
+        // ── 流场烘焙校验 ─────────────────────────────────────
+
+        /// <summary>
+        /// 检查预烘焙流场数据是否有效
+        /// </summary>
+        /// <returns>烘焙数据是否可直接使用</returns>
+        public bool HasValidBakedFlowField()
+        {
+            if (BakedFlowFieldDirections == null || BakedFlowFieldDirections.Length == 0)
+                return false;
+            if (BakedFlowFieldDirections.Length != Width * Height)
+                return false;
+            if (BakedFlowFieldVersion != FlowFieldAlgorithmVersion)
+                return false;
+            if (BakedFlowFieldDataHash != ComputeFlowFieldDataHash())
+                return false;
+            return true;
+        }
+
+        /// <summary>
+        /// 计算网格+目标点数据的 FNV-1a 哈希值，用于烘焙数据校验
+        /// </summary>
+        public uint ComputeFlowFieldDataHash()
+        {
+            uint hash = 2166136261u;
+            if (Cells != null)
+            {
+                for (int i = 0; i < Cells.Length; i++)
+                {
+                    hash ^= Cells[i];
+                    hash *= 16777619u;
+                }
+            }
+            if (GoalPoints != null)
+            {
+                for (int i = 0; i < GoalPoints.Length; i++)
+                {
+                    // 与 FlowFieldBakeSystem.ComputeDataHash 保持一致：使用 int 转换
+                    hash ^= (uint)(int)GoalPoints[i].x;
+                    hash *= 16777619u;
+                    hash ^= (uint)(int)GoalPoints[i].y;
+                    hash *= 16777619u;
+                }
+            }
+            return hash;
         }
     }
 }

@@ -3,6 +3,7 @@ using MemoryPack;
 using NUnit.Framework;
 using TowerDefense.Components;
 using TowerDefense.Data;
+using UnityEngine;
 
 namespace TowerDefense.Tests
 {
@@ -109,25 +110,25 @@ namespace TowerDefense.Tests
         public void RoundTrip_SpawnAndGoalPoints_Preserved()
         {
             var config = LevelConfig.CreateEmpty("points_test", 10, 10);
-            config.SpawnPoints = new[] { "0,0", "5,0" };
-            config.GoalPoints = new[] { "9,9" };
+            config.SpawnPoints = new[] { new Vector2(0, 0), new Vector2(5, 0) };
+            config.GoalPoints = new[] { new Vector2(9, 9) };
 
             byte[] bytes = MemoryPackSerializer.Serialize(config);
             var result = MemoryPackSerializer.Deserialize<LevelConfig>(bytes);
 
             Assert.AreEqual(2, result.SpawnPoints.Length);
-            Assert.AreEqual("0,0", result.SpawnPoints[0]);
-            Assert.AreEqual("5,0", result.SpawnPoints[1]);
+            Assert.AreEqual(new Vector2(0, 0), result.SpawnPoints[0]);
+            Assert.AreEqual(new Vector2(5, 0), result.SpawnPoints[1]);
             Assert.AreEqual(1, result.GoalPoints.Length);
-            Assert.AreEqual("9,9", result.GoalPoints[0]);
+            Assert.AreEqual(new Vector2(9, 9), result.GoalPoints[0]);
         }
 
         [Test]
         public void RoundTrip_EmptyArrays_Preserved()
         {
             var config = LevelConfig.CreateEmpty("empty_arrays", 5, 5);
-            config.SpawnPoints = Array.Empty<string>();
-            config.GoalPoints = Array.Empty<string>();
+            config.SpawnPoints = Array.Empty<Vector2>();
+            config.GoalPoints = Array.Empty<Vector2>();
 
             byte[] bytes = MemoryPackSerializer.Serialize(config);
             var result = MemoryPackSerializer.Deserialize<LevelConfig>(bytes);
@@ -136,6 +137,48 @@ namespace TowerDefense.Tests
             Assert.IsNotNull(result.GoalPoints);
             Assert.AreEqual(0, result.SpawnPoints.Length);
             Assert.AreEqual(0, result.GoalPoints.Length);
+        }
+
+        [Test]
+        public void BakedFlowField_ValidHash_ReturnsTrue()
+        {
+            var config = LevelConfig.CreateEmpty("bake_test", 5, 5, 1.0f, CellType.Walkable);
+            config.GoalPoints = new[] { new Vector2(2, 2) };
+
+            config.BakedFlowFieldDirections = new byte[25];
+            config.BakedFlowFieldVersion = LevelConfig.FlowFieldAlgorithmVersion;
+            config.BakedFlowFieldDataHash = config.ComputeFlowFieldDataHash();
+
+            Assert.IsTrue(config.HasValidBakedFlowField());
+        }
+
+        [Test]
+        public void BakedFlowField_WrongVersion_ReturnsFalse()
+        {
+            var config = LevelConfig.CreateEmpty("bake_test", 5, 5, 1.0f, CellType.Walkable);
+            config.GoalPoints = new[] { new Vector2(2, 2) };
+
+            config.BakedFlowFieldDirections = new byte[25];
+            config.BakedFlowFieldVersion = 0; // wrong version
+            config.BakedFlowFieldDataHash = config.ComputeFlowFieldDataHash();
+
+            Assert.IsFalse(config.HasValidBakedFlowField());
+        }
+
+        [Test]
+        public void BakedFlowField_DataChanged_HashMismatch()
+        {
+            var config = LevelConfig.CreateEmpty("bake_test", 5, 5, 1.0f, CellType.Walkable);
+            config.GoalPoints = new[] { new Vector2(2, 2) };
+
+            config.BakedFlowFieldDirections = new byte[25];
+            config.BakedFlowFieldVersion = LevelConfig.FlowFieldAlgorithmVersion;
+            config.BakedFlowFieldDataHash = config.ComputeFlowFieldDataHash();
+
+            // Modify grid data after bake
+            config.SetCellType(0, 0, CellType.Solid);
+
+            Assert.IsFalse(config.HasValidBakedFlowField());
         }
 
         // ── LevelConfig API ──────────────────────────────────

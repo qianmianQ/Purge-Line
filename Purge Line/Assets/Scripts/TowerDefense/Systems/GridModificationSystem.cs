@@ -175,7 +175,7 @@ namespace TowerDefense.Systems
             if (!TryGetMapDataAndBuffer(entityManager, out var mapData, out _))
                 return false;
 
-            gridCoord = GridMath.WorldToGrid(worldPos, mapData.Origin, mapData.CellSize);
+            GridMath.WorldToGrid(worldPos, mapData.Origin, mapData.CellSize, out gridCoord);
             return TryGetCellState(entityManager, gridCoord, out cellType, out cellState);
         }
 

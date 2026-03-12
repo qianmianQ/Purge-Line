@@ -5,7 +5,8 @@
         "TowerDefense",
         "Unity.Entities",
         "Unity.Collections",
-        "Unity.Mathematics"
+        "Unity.Mathematics",
+        "Unity.Burst"
     ],
     "includePlatforms": [
         "Editor"

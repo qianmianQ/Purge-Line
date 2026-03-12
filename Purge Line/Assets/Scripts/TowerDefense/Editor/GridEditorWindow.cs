@@ -1,26 +1,27 @@
 #if UNITY_EDITOR
 using System;
-using System.IO;
+using System.Collections.Generic;
 using TowerDefense.Components;
 using TowerDefense.Data;
+using TowerDefense.Utilities;
+using Unity.Mathematics;
 using UnityEditor;
 using UnityEngine;
 
 namespace TowerDefense.Editor
 {
     /// <summary>
-    /// 网格编辑器窗口 — 可视化关卡地图编辑工具
+    /// 关卡编辑器窗口 — 可视化关卡地图编辑工具
     ///
     /// 功能：
     /// - 新建/加载/保存关卡配置（LevelConfigAsset）
-    /// - 画笔模式：选择 CellType 后点击/拖拽绘制
-    /// - 橡皮模式：擦除为 None
-    /// - 填充模式：批量填充矩形区域
+    /// - 画笔/橡皮/填充模式绘制
+    /// - 目标点(GoalPoint)/出生点(SpawnPoint) 可视化编辑
+    /// - 流场烘焙与可视化
     /// - Undo/Redo 支持
     /// - 快捷键绑定
-    /// - 实时颜色预览
     ///
-    /// 入口：Window > Tower Defense > Grid Editor
+    /// 入口：Window > Tower Defense > 关卡编辑器
     /// </summary>
     public class GridEditorWindow : EditorWindow
     {
@@ -29,7 +30,6 @@ namespace TowerDefense.Editor
         private const float MinCellDrawSize = 4f;
         private const float MaxCellDrawSize = 64f;
         private const float DefaultCellDrawSize = 20f;
-        private const float ToolbarHeight = 220f;
 
         // ── 颜色定义 ─────────────────────────────────────────
 
@@ -40,6 +40,9 @@ namespace TowerDefense.Editor
         private static readonly Color ColorComposite = new Color(0.2f, 0.8f, 0.8f, 0.6f);
         private static readonly Color ColorGridLine = new Color(0.4f, 0.4f, 0.4f, 0.3f);
         private static readonly Color ColorHover = new Color(1f, 1f, 0f, 0.3f);
+        private static readonly Color ColorGoalMarker = new Color(1f, 0.2f, 0.2f, 0.9f);
+        private static readonly Color ColorSpawnMarker = new Color(0.2f, 0.5f, 1f, 0.9f);
+        private static readonly Color ColorFlowArrow = new Color(1f, 0.6f, 0f, 0.85f);
 
         // ── 编辑状态 ─────────────────────────────────────────
 
@@ -59,21 +62,48 @@ namespace TowerDefense.Editor
         private int _fillStartX;
         private int _fillStartY;
 
+        // 流场编辑器状态
+        private byte[] _editorBakedDirections;
+        private bool _showFlowField;
+        private bool _saveBakeToConfig;
+
+        // 点位快速查找缓存
+        private readonly HashSet<long> _goalPointSet = new HashSet<long>();
+        private readonly HashSet<long> _spawnPointSet = new HashSet<long>();
+
         private enum BrushMode
         {
-            Paint,    // 画笔
-            Erase,    // 橡皮
-            Fill      // 矩形填充
+            Paint,         // 画笔
+            Erase,         // 橡皮
+            Fill,          // 矩形填充
+            SetGoalPoint,  // 设置目标点
+            SetSpawnPoint  // 设置出生点
         }
 
         // ── 菜单入口 ─────────────────────────────────────────
 
-        [MenuItem("Window/Tower Defense/Grid Editor %#g")]
+        [MenuItem("Window/Tower Defense/关卡编辑器 %#g")]
         public static void ShowWindow()
         {
             var window = GetWindow<GridEditorWindow>();
-            window.titleContent = new GUIContent("Grid Editor", EditorGUIUtility.IconContent("Grid.Default").image);
+            window.titleContent = new GUIContent("关卡编辑器", EditorGUIUtility.IconContent("Grid.Default").image);
             window.minSize = new Vector2(600, 400);
+        }
+
+        // ── 辅助方法 ─────────────────────────────────────────
+
+        private static long PackCoord(int x, int y) => ((long)x << 32) | (uint)y;
+
+        private void RefreshPointSets()
+        {
+            _goalPointSet.Clear();
+            _spawnPointSet.Clear();
+            if (_currentAsset?.goalPoints != null)
+                foreach (var gp in _currentAsset.goalPoints)
+                    _goalPointSet.Add(PackCoord(Mathf.FloorToInt(gp.x), Mathf.FloorToInt(gp.y)));
+            if (_currentAsset?.spawnPoints != null)
+                foreach (var sp in _currentAsset.spawnPoints)
+                    _spawnPointSet.Add(PackCoord(Mathf.FloorToInt(sp.x), Mathf.FloorToInt(sp.y)));
         }
 
         // ── GUI 绘制 ─────────────────────────────────────────
@@ -98,6 +128,10 @@ namespace TowerDefense.Editor
             if (newAsset != _currentAsset)
             {
                 _currentAsset = newAsset;
+                _editorBakedDirections = null;
+                _showFlowField = false;
+                RefreshPointSets();
+                GridSceneOverlay.SetActiveAsset(_currentAsset);
                 Repaint();
             }
 
@@ -132,6 +166,7 @@ namespace TowerDefense.Editor
                 _currentAsset.width = Mathf.Max(1, newWidth);
                 _currentAsset.height = Mathf.Max(1, newHeight);
                 _currentAsset.EnsureCellsArray();
+                _editorBakedDirections = null;
                 EditorUtility.SetDirty(_currentAsset);
             }
 
@@ -146,26 +181,29 @@ namespace TowerDefense.Editor
 
             // ── 画笔工具行 ────
             EditorGUILayout.BeginHorizontal();
-            EditorGUILayout.LabelField("Brush", GUILayout.Width(50));
+            EditorGUILayout.LabelField("工具", GUILayout.Width(50));
             _brushMode = (BrushMode)GUILayout.Toolbar((int)_brushMode,
-                new[] { "Paint", "Erase", "Fill" }, GUILayout.Height(24));
+                new[] { "画笔", "橡皮", "填充", "目标点", "出生点" }, GUILayout.Height(24));
             EditorGUILayout.EndHorizontal();
 
-            // ── 格子类型选择 ────
-            EditorGUILayout.BeginHorizontal();
-            EditorGUILayout.LabelField("Cell Type", GUILayout.Width(70));
+            // ── 格子类型选择（仅画笔/填充模式）────
+            if (_brushMode == BrushMode.Paint || _brushMode == BrushMode.Fill)
+            {
+                EditorGUILayout.BeginHorizontal();
+                EditorGUILayout.LabelField("格子类型", GUILayout.Width(70));
 
-            DrawCellTypeButton(CellType.None, "None", ColorNone);
-            DrawCellTypeButton(CellType.Solid, "Solid", ColorSolid);
-            DrawCellTypeButton(CellType.Walkable, "Walk", ColorWalkable);
-            DrawCellTypeButton(CellType.Placeable, "Place", ColorPlaceable);
-            DrawCellTypeButton(CellType.WalkableAndPlaceable, "W+P", ColorComposite);
+                DrawCellTypeButton(CellType.None, "None", ColorNone);
+                DrawCellTypeButton(CellType.Solid, "Solid", ColorSolid);
+                DrawCellTypeButton(CellType.Walkable, "Walk", ColorWalkable);
+                DrawCellTypeButton(CellType.Placeable, "Place", ColorPlaceable);
+                DrawCellTypeButton(CellType.WalkableAndPlaceable, "W+P", ColorComposite);
 
-            EditorGUILayout.EndHorizontal();
+                EditorGUILayout.EndHorizontal();
+            }
 
             // ── 缩放和操作按钮 ────
             EditorGUILayout.BeginHorizontal();
-            EditorGUILayout.LabelField("Zoom", GUILayout.Width(40));
+            EditorGUILayout.LabelField("缩放", GUILayout.Width(40));
             _cellDrawSize = EditorGUILayout.Slider(_cellDrawSize, MinCellDrawSize, MaxCellDrawSize);
 
             if (GUILayout.Button("Fill All", GUILayout.Width(60)))
@@ -183,6 +221,50 @@ namespace TowerDefense.Editor
             }
 
             EditorGUILayout.EndHorizontal();
+
+            EditorGUILayout.Space(4);
+
+            // ── 流场工具行 ────
+            EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+            EditorGUILayout.LabelField("流场工具", EditorStyles.boldLabel);
+
+            EditorGUILayout.BeginHorizontal();
+
+            bool hasGoals = _currentAsset.goalPoints != null && _currentAsset.goalPoints.Length > 0;
+            EditorGUI.BeginDisabledGroup(!hasGoals);
+            if (GUILayout.Button("Bake 流场", GUILayout.Height(24), GUILayout.Width(100)))
+            {
+                BakeFlowField();
+            }
+            EditorGUI.EndDisabledGroup();
+
+            if (!hasGoals)
+            {
+                EditorGUILayout.HelpBox("请先设置目标点", MessageType.None);
+            }
+
+            EditorGUILayout.EndHorizontal();
+
+            EditorGUILayout.BeginHorizontal();
+
+            EditorGUI.BeginDisabledGroup(_editorBakedDirections == null);
+            _showFlowField = EditorGUILayout.ToggleLeft("显示流场", _showFlowField, GUILayout.Width(80));
+            EditorGUI.EndDisabledGroup();
+
+            _saveBakeToConfig = EditorGUILayout.ToggleLeft("保存Bake结果到LevelConfig", _saveBakeToConfig);
+
+            EditorGUILayout.EndHorizontal();
+
+            if (_editorBakedDirections != null)
+            {
+                EditorGUILayout.LabelField(
+                    $"流场状态: 已烘焙 ({_editorBakedDirections.Length} cells)",
+                    EditorStyles.miniLabel);
+            }
+
+            EditorGUILayout.EndVertical();
+
+            EditorGUILayout.Space(4);
 
             // ── 导出按钮 ────
             EditorGUILayout.BeginHorizontal();
@@ -208,7 +290,9 @@ namespace TowerDefense.Editor
             EditorGUILayout.LabelField(
                 $"Grid: {_currentAsset.width}×{_currentAsset.height} | " +
                 $"Hover: ({_hoverX}, {_hoverY}) | " +
-                $"Brush: {_brushType} | Mode: {_brushMode}",
+                $"Goals: {_currentAsset.goalPoints?.Length ?? 0} | " +
+                $"Spawns: {_currentAsset.spawnPoints?.Length ?? 0} | " +
+                $"Mode: {_brushMode}",
                 EditorStyles.miniLabel);
 
             EditorGUILayout.EndVertical();
@@ -241,7 +325,6 @@ namespace TowerDefense.Editor
 
             if (Event.current.type == EventType.Repaint)
             {
-                // 背景
                 EditorGUI.DrawRect(gridRect, new Color(0.1f, 0.1f, 0.1f, 1f));
             }
 
@@ -250,55 +333,61 @@ namespace TowerDefense.Editor
             float totalWidth = _currentAsset.width * _cellDrawSize;
             float totalHeight = _currentAsset.height * _cellDrawSize;
 
-            // 计算起始偏移（居中 + 平移）
             float offsetX = (gridRect.width - totalWidth) * 0.5f + _panOffset.x;
             float offsetY = (gridRect.height - totalHeight) * 0.5f + _panOffset.y;
 
-            // 绘制格子
             for (int y = 0; y < _currentAsset.height; y++)
             {
                 for (int x = 0; x < _currentAsset.width; x++)
                 {
                     float drawX = offsetX + x * _cellDrawSize;
-                    float drawY = offsetY + (_currentAsset.height - 1 - y) * _cellDrawSize; // 翻转Y轴
+                    float drawY = offsetY + (_currentAsset.height - 1 - y) * _cellDrawSize;
 
                     var cellRect = new Rect(drawX, drawY, _cellDrawSize, _cellDrawSize);
 
-                    // 只绘制可见区域
                     if (cellRect.xMax < 0 || cellRect.xMin > gridRect.width ||
                         cellRect.yMax < 0 || cellRect.yMin > gridRect.height)
                         continue;
 
+                    if (Event.current.type != EventType.Repaint) continue;
+
                     var cellType = _currentAsset.GetCellType(x, y);
-                    Color cellColor = GetCellColor(cellType);
+                    EditorGUI.DrawRect(cellRect, GetCellColor(cellType));
 
-                    if (Event.current.type == EventType.Repaint)
+                    // 网格线
+                    EditorGUI.DrawRect(new Rect(cellRect.x, cellRect.y, cellRect.width, 1), ColorGridLine);
+                    EditorGUI.DrawRect(new Rect(cellRect.x, cellRect.y, 1, cellRect.height), ColorGridLine);
+
+                    // 目标点标记
+                    if (_goalPointSet.Contains(PackCoord(x, y)))
+                        DrawMarker(cellRect, ColorGoalMarker, "G");
+
+                    // 出生点标记
+                    if (_spawnPointSet.Contains(PackCoord(x, y)))
+                        DrawMarker(cellRect, ColorSpawnMarker, "S");
+
+                    // 流场方向指示
+                    if (_showFlowField && _editorBakedDirections != null)
                     {
-                        EditorGUI.DrawRect(cellRect, cellColor);
+                        int index = y * _currentAsset.width + x;
+                        if (index < _editorBakedDirections.Length)
+                            DrawFlowFieldIndicator(drawX, drawY, _cellDrawSize, _editorBakedDirections[index]);
+                    }
 
-                        // 网格线
-                        EditorGUI.DrawRect(new Rect(cellRect.x, cellRect.y, cellRect.width, 1), ColorGridLine);
-                        EditorGUI.DrawRect(new Rect(cellRect.x, cellRect.y, 1, cellRect.height), ColorGridLine);
+                    // 悬浮高亮
+                    if (x == _hoverX && y == _hoverY)
+                        EditorGUI.DrawRect(cellRect, ColorHover);
 
-                        // 悬浮高亮
-                        if (x == _hoverX && y == _hoverY)
-                        {
-                            EditorGUI.DrawRect(cellRect, ColorHover);
-                        }
+                    // 填充模式拖拽预览
+                    if (_isFillDragging && _brushMode == BrushMode.Fill)
+                    {
+                        int minX = Mathf.Min(_fillStartX, _hoverX);
+                        int maxX = Mathf.Max(_fillStartX, _hoverX);
+                        int minY = Mathf.Min(_fillStartY, _hoverY);
+                        int maxY = Mathf.Max(_fillStartY, _hoverY);
 
-                        // 填充模式拖拽预览
-                        if (_isFillDragging && _brushMode == BrushMode.Fill)
-                        {
-                            int minX = Mathf.Min(_fillStartX, _hoverX);
-                            int maxX = Mathf.Max(_fillStartX, _hoverX);
-                            int minY = Mathf.Min(_fillStartY, _hoverY);
-                            int maxY = Mathf.Max(_fillStartY, _hoverY);
-
-                            if (x >= minX && x <= maxX && y >= minY && y <= maxY)
-                            {
-                                EditorGUI.DrawRect(cellRect, new Color(1f, 1f, 0f, 0.2f));
-                            }
-                        }
+                        if (x >= minX && x <= maxX && y >= minY && y <= maxY)
+                            EditorGUI.DrawRect(cellRect, new Color(1f, 1f, 0f, 0.2f));
                     }
                 }
             }
@@ -314,6 +403,63 @@ namespace TowerDefense.Editor
             }
 
             GUI.EndClip();
+        }
+
+        /// <summary>绘制目标点/出生点标记</summary>
+        private void DrawMarker(Rect cellRect, Color color, string label)
+        {
+            float markerSize = Mathf.Max(4f, _cellDrawSize * 0.5f);
+            float cx = cellRect.center.x;
+            float cy = cellRect.center.y;
+
+            EditorGUI.DrawRect(
+                new Rect(cx - markerSize * 0.5f, cy - markerSize * 0.5f, markerSize, markerSize),
+                color);
+
+            if (_cellDrawSize >= 16f)
+            {
+                var style = new GUIStyle(EditorStyles.miniLabel)
+                {
+                    alignment = TextAnchor.MiddleCenter,
+                    normal = { textColor = Color.white },
+                    fontSize = Mathf.Max(8, (int)(_cellDrawSize * 0.3f))
+                };
+                GUI.Label(cellRect, label, style);
+            }
+        }
+
+        /// <summary>绘制流场方向指示器</summary>
+        private static void DrawFlowFieldIndicator(float drawX, float drawY, float size, byte direction)
+        {
+            if (!FlowFieldMath.IsValidDirection(direction)) return;
+
+            float cx = drawX + size * 0.5f;
+            float cy = drawY + size * 0.5f;
+
+            int2 offset = FlowFieldMath.DirectionToOffset(direction);
+            float dx = offset.x;
+            float dy = -offset.y; // Y翻转
+
+            float radius = size * 0.3f;
+            float dotSize = Mathf.Max(2f, size * 0.15f);
+
+            float tipX = cx + dx * radius;
+            float tipY = cy + dy * radius;
+
+            EditorGUI.DrawRect(
+                new Rect(tipX - dotSize * 0.5f, tipY - dotSize * 0.5f, dotSize, dotSize),
+                ColorFlowArrow);
+
+            // 中间点（格子够大时画线段近似）
+            if (size >= 12f)
+            {
+                float midX = (cx + tipX) * 0.5f;
+                float midY = (cy + tipY) * 0.5f;
+                float midDot = dotSize * 0.6f;
+                EditorGUI.DrawRect(
+                    new Rect(midX - midDot * 0.5f, midY - midDot * 0.5f, midDot, midDot),
+                    ColorFlowArrow);
+            }
         }
 
         /// <summary>处理输入事件</summary>
@@ -351,7 +497,7 @@ namespace TowerDefense.Editor
                 e.Use();
             }
 
-            // 左键绘制
+            // 左键操作
             if (e.button == 0 && !_isPanning)
             {
                 bool isValidCoord = _hoverX >= 0 && _hoverX < _currentAsset.width &&
@@ -359,24 +505,29 @@ namespace TowerDefense.Editor
 
                 if (e.type == EventType.MouseDown && isValidCoord)
                 {
-                    if (_brushMode == BrushMode.Fill)
+                    switch (_brushMode)
                     {
-                        _isFillDragging = true;
-                        _fillStartX = _hoverX;
-                        _fillStartY = _hoverY;
-                    }
-                    else
-                    {
-                        PaintCell(_hoverX, _hoverY);
+                        case BrushMode.Fill:
+                            _isFillDragging = true;
+                            _fillStartX = _hoverX;
+                            _fillStartY = _hoverY;
+                            break;
+                        case BrushMode.SetGoalPoint:
+                            ToggleGoalPoint(_hoverX, _hoverY);
+                            break;
+                        case BrushMode.SetSpawnPoint:
+                            ToggleSpawnPoint(_hoverX, _hoverY);
+                            break;
+                        default:
+                            PaintCell(_hoverX, _hoverY);
+                            break;
                     }
                     e.Use();
                 }
                 else if (e.type == EventType.MouseDrag && isValidCoord)
                 {
-                    if (_brushMode != BrushMode.Fill)
-                    {
+                    if (_brushMode == BrushMode.Paint || _brushMode == BrushMode.Erase)
                         PaintCell(_hoverX, _hoverY);
-                    }
                     e.Use();
                 }
                 else if (e.type == EventType.MouseUp)
@@ -384,8 +535,7 @@ namespace TowerDefense.Editor
                     if (_isFillDragging && _brushMode == BrushMode.Fill && isValidCoord)
                     {
                         Undo.RecordObject(_currentAsset, "Fill Rect");
-                        CellType fillType = _brushMode == BrushMode.Erase ? CellType.None : _brushType;
-                        _currentAsset.FillRect(_fillStartX, _fillStartY, _hoverX, _hoverY, fillType);
+                        _currentAsset.FillRect(_fillStartX, _fillStartY, _hoverX, _hoverY, _brushType);
                         EditorUtility.SetDirty(_currentAsset);
                     }
                     _isFillDragging = false;
@@ -406,7 +556,8 @@ namespace TowerDefense.Editor
                     case KeyCode.B: _brushMode = BrushMode.Paint; e.Use(); break;
                     case KeyCode.E: _brushMode = BrushMode.Erase; e.Use(); break;
                     case KeyCode.F: _brushMode = BrushMode.Fill; e.Use(); break;
-                    case KeyCode.R: _panOffset = Vector2.zero; e.Use(); break; // 重置视图
+                    case KeyCode.G: _brushMode = BrushMode.SetGoalPoint; e.Use(); break;
+                    case KeyCode.R: _panOffset = Vector2.zero; e.Use(); break;
                 }
                 Repaint();
             }
@@ -422,6 +573,105 @@ namespace TowerDefense.Editor
             _currentAsset.SetCellType(x, y, type);
             EditorUtility.SetDirty(_currentAsset);
             Repaint();
+        }
+
+        // ── 目标点/出生点操作 ──────────────────────────────────
+
+        private void ToggleGoalPoint(int x, int y)
+        {
+            var list = new List<Vector2>(_currentAsset.goalPoints ?? Array.Empty<Vector2>());
+            int idx = list.FindIndex(p => Mathf.FloorToInt(p.x) == x && Mathf.FloorToInt(p.y) == y);
+
+            Undo.RecordObject(_currentAsset, "Toggle Goal Point");
+            if (idx >= 0) list.RemoveAt(idx);
+            else list.Add(new Vector2(x, y));
+
+            _currentAsset.goalPoints = list.ToArray();
+            EditorUtility.SetDirty(_currentAsset);
+            RefreshPointSets();
+            GridSceneOverlay.SetActiveAsset(_currentAsset);
+            Repaint();
+        }
+
+        private void ToggleSpawnPoint(int x, int y)
+        {
+            var list = new List<Vector2>(_currentAsset.spawnPoints ?? Array.Empty<Vector2>());
+            int idx = list.FindIndex(p => Mathf.FloorToInt(p.x) == x && Mathf.FloorToInt(p.y) == y);
+
+            Undo.RecordObject(_currentAsset, "Toggle Spawn Point");
+            if (idx >= 0) list.RemoveAt(idx);
+            else list.Add(new Vector2(x, y));
+
+            _currentAsset.spawnPoints = list.ToArray();
+            EditorUtility.SetDirty(_currentAsset);
+            RefreshPointSets();
+            GridSceneOverlay.SetActiveAsset(_currentAsset);
+            Repaint();
+        }
+
+        // ── 流场烘焙 ─────────────────────────────────────────
+
+        private void BakeFlowField()
+        {
+            if (_currentAsset == null) return;
+            if (_currentAsset.goalPoints == null || _currentAsset.goalPoints.Length == 0)
+            {
+                EditorUtility.DisplayDialog("Flow Field Bake", "请先设置至少一个目标点", "OK");
+                return;
+            }
+
+            _currentAsset.EnsureCellsArray();
+
+            var goalList = new List<int2>();
+            for (int i = 0; i < _currentAsset.goalPoints.Length; i++)
+            {
+                var gp = _currentAsset.goalPoints[i];
+                int gx = Mathf.FloorToInt(gp.x);
+                int gy = Mathf.FloorToInt(gp.y);
+                if (gx >= 0 && gx < _currentAsset.width && gy >= 0 && gy < _currentAsset.height)
+                    goalList.Add(new int2(gx, gy));
+                else
+                    Debug.LogWarning($"[关卡编辑器] Goal point ({gp.x}, {gp.y}) out of bounds, skipped");
+            }
+
+            if (goalList.Count == 0)
+            {
+                EditorUtility.DisplayDialog("Flow Field Bake", "所有目标点都超出网格范围", "OK");
+                return;
+            }
+
+            try
+            {
+                _editorBakedDirections = FlowFieldBaker.BakeInEditor(
+                    _currentAsset.cells, _currentAsset.width, _currentAsset.height,
+                    goalList.ToArray());
+                _showFlowField = true;
+
+                GridSceneOverlay.SetFlowFieldData(
+                    _editorBakedDirections, _currentAsset.width, _currentAsset.height);
+
+                if (_saveBakeToConfig)
+                {
+                    Undo.RecordObject(_currentAsset, "Save Baked Flow Field");
+                    _currentAsset.bakedFlowFieldDirections = (byte[])_editorBakedDirections.Clone();
+                    var tempConfig = _currentAsset.ToLevelConfig();
+                    _currentAsset.bakedFlowFieldDataHash = tempConfig.ComputeFlowFieldDataHash();
+                    _currentAsset.bakedFlowFieldVersion = LevelConfig.FlowFieldAlgorithmVersion;
+                    EditorUtility.SetDirty(_currentAsset);
+                    Debug.Log("[关卡编辑器] Flow field baked and saved to config");
+                }
+                else
+                {
+                    Debug.Log("[关卡编辑器] Flow field baked (not saved to config)");
+                }
+
+                Repaint();
+            }
+            catch (Exception ex)
+            {
+                EditorUtility.DisplayDialog("Flow Field Bake Error", $"烘焙失败: {ex.Message}", "OK");
+                Debug.LogException(ex);
+            }
         }
 
         /// <summary>获取格子类型对应的显示颜色</summary>
@@ -455,6 +705,8 @@ namespace TowerDefense.Editor
             AssetDatabase.CreateAsset(asset, path);
             AssetDatabase.SaveAssets();
             _currentAsset = asset;
+            _editorBakedDirections = null;
+            RefreshPointSets();
             Selection.activeObject = asset;
         }
 
@@ -466,7 +718,7 @@ namespace TowerDefense.Editor
             string path = LevelConfigLoader.GetEditorFilePath(_currentAsset.levelId);
             LevelConfigLoader.SaveToFile(config, path);
             AssetDatabase.Refresh();
-            Debug.Log($"[GridEditor] Exported to: {path}");
+            Debug.Log($"[关卡编辑器] Exported to: {path}");
         }
 
         private void ExportToResources()
@@ -477,7 +729,7 @@ namespace TowerDefense.Editor
             string path = LevelConfigLoader.GetResourcesFilePath(_currentAsset.levelId);
             LevelConfigLoader.SaveToFile(config, path);
             AssetDatabase.Refresh();
-            Debug.Log($"[GridEditor] Exported to Resources: {path}");
+            Debug.Log($"[关卡编辑器] Exported to Resources: {path}");
         }
 
         private void ImportFromBytes()
@@ -500,13 +752,16 @@ namespace TowerDefense.Editor
 
             Undo.RecordObject(_currentAsset, "Import Level Config");
             _currentAsset.FromLevelConfig(config);
+            _editorBakedDirections = null;
+            RefreshPointSets();
             EditorUtility.SetDirty(_currentAsset);
-            Debug.Log($"[GridEditor] Imported: {config.LevelId} ({config.Width}x{config.Height})");
+            Debug.Log($"[关卡编辑器] Imported: {config.LevelId} ({config.Width}x{config.Height})");
         }
 
         private void OnEnable()
         {
             wantsMouseMove = true;
+            RefreshPointSets();
         }
     }
 }

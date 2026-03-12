@@ -51,9 +51,22 @@ namespace TowerDefense.Editor
         [HideInInspector]
         public byte[] cells;
 
-        [Header("路径点（预留）")]
-        public string[] spawnPoints = Array.Empty<string>();
-        public string[] goalPoints = Array.Empty<string>();
+        [Header("路径点")]
+        [Tooltip("出生点（格子坐标）")]
+        public Vector2[] spawnPoints = Array.Empty<Vector2>();
+
+        [Tooltip("目标点（格子坐标）")]
+        public Vector2[] goalPoints = Array.Empty<Vector2>();
+
+        [Header("预烘焙流场（可选）")]
+        [HideInInspector]
+        public byte[] bakedFlowFieldDirections;
+
+        [HideInInspector]
+        public uint bakedFlowFieldDataHash;
+
+        [HideInInspector]
+        public int bakedFlowFieldVersion;
 
         // ── 格子数据操作 ──────────────────────────────────────
 
@@ -133,10 +146,13 @@ namespace TowerDefense.Editor
                 OriginX = originX,
                 OriginY = originY,
                 Cells = copy,
-                SpawnPoints = spawnPoints ?? Array.Empty<string>(),
-                GoalPoints = goalPoints ?? Array.Empty<string>(),
+                SpawnPoints = spawnPoints ?? Array.Empty<Vector2>(),
+                GoalPoints = goalPoints ?? Array.Empty<Vector2>(),
                 DisplayName = displayName,
-                Description = description
+                Description = description,
+                BakedFlowFieldDirections = bakedFlowFieldDirections,
+                BakedFlowFieldDataHash = bakedFlowFieldDataHash,
+                BakedFlowFieldVersion = bakedFlowFieldVersion
             };
         }
 
@@ -154,8 +170,11 @@ namespace TowerDefense.Editor
             originY = config.OriginY;
             displayName = config.DisplayName ?? config.LevelId;
             description = config.Description ?? string.Empty;
-            spawnPoints = config.SpawnPoints ?? Array.Empty<string>();
-            goalPoints = config.GoalPoints ?? Array.Empty<string>();
+            spawnPoints = config.SpawnPoints ?? Array.Empty<Vector2>();
+            goalPoints = config.GoalPoints ?? Array.Empty<Vector2>();
+            bakedFlowFieldDirections = config.BakedFlowFieldDirections;
+            bakedFlowFieldDataHash = config.BakedFlowFieldDataHash;
+            bakedFlowFieldVersion = config.BakedFlowFieldVersion;
 
             cells = new byte[config.Cells.Length];
             Array.Copy(config.Cells, cells, config.Cells.Length);
