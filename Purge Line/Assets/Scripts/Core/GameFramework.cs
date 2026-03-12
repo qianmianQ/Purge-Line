@@ -46,9 +46,6 @@ public class GameFramework : MonoBehaviour
         {
 #if UNITY_EDITOR
             logging.SetMinimumLevel(LogLevel.Trace);
-#else
-            logging.SetMinimumLevel(LogLevel.Information);
-#endif
             logging.AddZLoggerUnityDebug();
             logging.AddZLoggerRollingFile(options =>
             {
@@ -58,6 +55,17 @@ public class GameFramework : MonoBehaviour
                 options.RollingSizeKB   = 1024 * 10;
                 options.UseJsonFormatter();
             });
+#else
+            logging.SetMinimumLevel(LogLevel.Information);
+            logging.AddZLoggerRollingFile(options =>
+            {
+                options.FilePathSelector = (timestamp, seq) =>
+                    $"game_logs/{_startupTime:yyyy-MM-dd_HH-mm-ss}_{seq:000}.log";
+                options.RollingInterval = RollingInterval.Day;
+                options.RollingSizeKB   = 1024 * 10;
+                options.UseJsonFormatter();
+            });
+#endif
         });
         _logger = GameLogger.Create<GameFramework>();
 
