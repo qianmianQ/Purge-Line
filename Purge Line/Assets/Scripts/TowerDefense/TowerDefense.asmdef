@@ -14,7 +14,10 @@
         "ZLogger.Unity",
         "Core.ResourceSystem",
         "Unity.InputSystem",
-        "Unity.Entities.Graphics"
+        "Unity.Entities.Graphics",
+        "Unity.ResourceManager",
+        "UniTask",
+        "Unity.Addressables"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

@@ -7,6 +7,8 @@ using PurgeLine.Events;
 using PurgeLine.Resource;
 using PurgeLine.Resource.Internal;
 using TowerDefense.Bridge;
+using TowerDefense.Data;
+using TowerDefense.ECS.Bridge;
 using ZLogger;
 using ZLogger.Providers;
 using ZLogger.Unity;
@@ -98,7 +100,12 @@ public class GameFramework : MonoBehaviour
 
     private void Start()
     {
-        
+        DependencyManager.Instance.Get<EcsVisualBridgeSystem>().InitEntitiesPools(new []
+        {
+            CombatConfig.TowerPrefabAddress,
+            CombatConfig.BulletPrefabAddress,
+            CombatConfig.EnemyPrefabAddress
+        });
         //等待3秒加载关卡
         Invoke(nameof(StartGame), 3f);
     }
@@ -139,6 +146,8 @@ public class GameFramework : MonoBehaviour
 
         // 炮塔放置系统 — 输入处理 + 虚影显示
         sm.Register(new TowerPlacementSystem());
+        
+        sm.Register(new EcsVisualBridgeSystem());
 
         _logger.LogInformation("All dependency registered, framework running");
     }
