@@ -1,4 +1,6 @@
+using Base.BaseSystem.EventSystem;
 using Microsoft.Extensions.Logging;
+using PurgeLine.Events;
 using TowerDefense.Components;
 using TowerDefense.Data;
 using Unity.Burst;
@@ -56,18 +58,17 @@ namespace TowerDefense.Systems
         {
             var ecb = new EntityCommandBuffer(Allocator.Temp);
 
+            // 标记本次是否生成了grid
+            bool gridCreated = false;
+            LevelConfig lastLevelConfig = null;
+
             // 必须在 Query 迭代之前清理旧 singleton：
-            // EntityManager.DestroyEntity 是结构性变更，在 foreach 内部调用会抛出
-            // InvalidOperationException，同时导致 ECB 未 Playback，
-            // 请求实体残留，下一帧 Consume 时数据已不存在（LevelConfig not found）。
             CleanupExistingSingleton(ref state);
 
-            foreach (var (request, entity) in
-                     SystemAPI.Query<RefRO<GridSpawnRequest>>().WithEntityAccess())
+            foreach (var (request, entity) in SystemAPI.Query<RefRO<GridSpawnRequest>>().WithEntityAccess())
             {
                 var req = request.ValueRO;
-                _logger.LogInformation("[GridSpawnSystem] Processing spawn request: {0}x{1}, CellDataId={2}",
-                    req.Width, req.Height, req.CellDataId);
+                _logger.LogInformation("[GridSpawnSystem] Processing spawn request: {0}x{1}, CellDataId={2}", req.Width, req.Height, req.CellDataId);
 
                 // 从共享存储获取配置
                 var levelConfig = SharedLevelDataStore.Consume(req.CellDataId);
@@ -80,7 +81,6 @@ namespace TowerDefense.Systems
 
                 // 构建 BlobAsset
                 var blobRef = BuildBlobAsset(levelConfig);
-
 
                 // 创建 singleton entity
                 var singletonEntity = ecb.CreateEntity();
@@ -115,9 +115,7 @@ namespace TowerDefense.Systems
                         }
                         else
                         {
-                            _logger.LogWarning(
-                                "[GridSpawnSystem] Goal point ({0},{1}) is out of bounds, skipped",
-                                gp.x, gp.y);
+                            _logger.LogWarning("[GridSpawnSystem] Goal point ({0},{1}) is out of bounds, skipped", gp.x, gp.y);
                         }
                     }
                 }
@@ -149,9 +147,11 @@ namespace TowerDefense.Systems
                 // 标记脏，通知渲染系统
                 ecb.AddComponent<GridDirtyTag>(singletonEntity);
 
-                _logger.LogInformation("[GridSpawnSystem] Map created: {0}x{1}, CellSize={2}, Origin=({3},{4}), Goals={5}",
-                    levelConfig.Width, levelConfig.Height, levelConfig.CellSize,
-                    levelConfig.OriginX, levelConfig.OriginY, goalBuffer.Length);
+                _logger.LogInformation("[GridSpawnSystem] Map created: {0}x{1}, CellSize={2}, Origin=({3},{4}), Goals={5}", levelConfig.Width, levelConfig.Height, levelConfig.CellSize, levelConfig.OriginX, levelConfig.OriginY, goalBuffer.Length);
+
+                // 标记本次生成了grid
+                gridCreated = true;
+                lastLevelConfig = levelConfig;
 
                 // 销毁请求
                 ecb.DestroyEntity(entity);
@@ -159,6 +159,18 @@ namespace TowerDefense.Systems
 
             ecb.Playback(state.EntityManager);
             ecb.Dispose();
+
+            // 如果本次生成了grid，发送事件
+            if (gridCreated)
+            {
+                EventManager.Gameplay.Dispatch(new GridMapLoadedEvent
+                {
+                    LevelId = lastLevelConfig.LevelId,
+                    Width = lastLevelConfig.Width,
+                    Height = lastLevelConfig.Height,
+                    CellSize = lastLevelConfig.CellSize
+                });
+            }
         }
 
         /// <summary>

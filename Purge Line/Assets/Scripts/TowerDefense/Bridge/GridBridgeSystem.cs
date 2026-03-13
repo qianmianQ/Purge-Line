@@ -160,14 +160,6 @@ namespace TowerDefense.Bridge
 
             _logger.LogInformation("[GridBridgeSystem] Level load requested: {0} ({1}x{2}), Goals={3}",
                 config.LevelId, config.Width, config.Height, config.GoalPoints?.Length ?? 0);
-            
-            EventManager.Gameplay.Dispatch(new GridMapLoadedEvent{
-                    LevelId = config.LevelId,
-                    Width = config.Width,
-                    Height = config.Height,
-                    CellSize = config.CellSize
-                });
-
             return true;
         }
 

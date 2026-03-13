@@ -85,9 +85,14 @@ namespace TowerDefense.Bridge
             CleanupCombatEntities();
 
             // ── 创建 EnemySpawnTimer singleton ──────────────────
+            // 注意：使用 EndSimulationEntityCommandBufferSystem 因为此方法可能在 ECS 系统迭代期间被调用
+            // 使用 EndSimulationECB 让变更在当前帧结束时自动应用，而不是立即执行
 
-            var spawnTimerEntity = em.CreateEntity();
-            em.AddComponentData(spawnTimerEntity, new EnemySpawnTimer
+            var ecbSystem = _ecsWorld.GetOrCreateSystemManaged<EndSimulationEntityCommandBufferSystem>();
+            var ecb = ecbSystem.CreateCommandBuffer();
+
+            var spawnTimerEntity = ecb.CreateEntity();
+            ecb.AddComponent(spawnTimerEntity, new EnemySpawnTimer
             {
                 SpawnInterval = CombatConfig.EnemySpawnInterval,
                 Timer = 0f,
@@ -97,7 +102,7 @@ namespace TowerDefense.Bridge
             });
 
             // 添加出生点 buffer
-            var spawnBuffer = em.AddBuffer<SpawnPointData>(spawnTimerEntity);
+            var spawnBuffer = ecb.AddBuffer<SpawnPointData>(spawnTimerEntity);
 
             // 从 GridMapData 获取地图信息，从 LevelConfig 获取出生点
             using var mapQuery = em.CreateEntityQuery(ComponentType.ReadOnly<GridMapData>());
@@ -109,9 +114,6 @@ namespace TowerDefense.Bridge
                 var bridgeSystem = DependencyManager.Instance.Get<GridBridgeSystem>();
                 if (bridgeSystem != null && bridgeSystem.CurrentLevelId != null)
                 {
-                    // 从 SharedLevelDataStore Peek 获取出生点（GridBridgeSystem 可能已 Consume）
-                    // 改用 GridBridgeSystem 的 GridToWorld API 转换出生点坐标
-                    // 这里我们直接从 LevelConfig 获取 SpawnPoints
                     var levelConfig = LevelConfigLoader.LoadFromResources(bridgeSystem.CurrentLevelId);
                     if (levelConfig?.SpawnPoints != null)
                     {
@@ -144,6 +146,9 @@ namespace TowerDefense.Bridge
             {
                 _logger.LogWarning("[CombatBridgeSystem] GridMapData not found, deferring spawn point setup");
             }
+
+            // 注意：使用 EndSimulationEntityCommandBufferSystem 时不需要手动调用 Playback
+            // ECB 会在当前帧 Simulation 阶段结束时自动应用所有变更
 
             IsCombatReady = true;
             _logger.LogInformation("[CombatBridgeSystem] Combat initialized, {0} spawn points",

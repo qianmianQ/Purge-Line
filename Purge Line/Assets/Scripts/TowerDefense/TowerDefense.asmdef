@@ -13,7 +13,8 @@
         "Core",
         "ZLogger.Unity",
         "Core.ResourceSystem",
-        "Unity.InputSystem"
+        "Unity.InputSystem",
+        "Unity.Entities.Graphics"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],
