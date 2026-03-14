@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using Cysharp.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using UnityEngine;
+using VContainer;
 using ILogger = Microsoft.Extensions.Logging.ILogger;
 
 namespace TowerDefense.TowerDefense.Utilities.GameObjectPool
@@ -10,7 +11,7 @@ namespace TowerDefense.TowerDefense.Utilities.GameObjectPool
     /// <summary>
     /// 对象池管理器接口
     /// </summary>
-    public interface IPoolManager : IDisposable
+    public interface IGameObjectPoolManager : IDisposable
     {
         UniTask CreatePoolAsync(string address, int initialSize = 5, bool trackInstanceAddress = true);
         void CreatePool(string address, int initialSize = 5, bool trackInstanceAddress = true);
@@ -27,32 +28,29 @@ namespace TowerDefense.TowerDefense.Utilities.GameObjectPool
     /// <summary>
     /// 对象池管理器
     /// </summary>
-    public class PoolManager : IPoolManager
+    public class GameObjectPoolManager : IGameObjectPoolManager
     {
         private readonly Dictionary<string, GameObjectPool> _pools = new Dictionary<string, GameObjectPool>();
         private readonly Dictionary<int, string> _instanceToAddressMap = new Dictionary<int, string>();
         private readonly Dictionary<string, bool> _poolTrackAddressMap = new Dictionary<string, bool>();
         
-        private static readonly ILogger Logger = GameLogger.Create<PoolManager>();
+        private static readonly ILogger Logger = GameLogger.Create<GameObjectPoolManager>();
 
         private readonly Transform _globalPoolRoot;
         private readonly object _lockObj = new object();
+        
+        private readonly IObjectResolver _container;
 
         private Vector3 _recyclePosition = Vector3.zero;
         private bool _recycleWorldSpace;
 
-        public PoolManager(Transform root = null)
+        public GameObjectPoolManager(IObjectResolver container)
         {
-            if (root == null)
-            {
-                var go = new GameObject("[PoolManager_Root]");
-                _globalPoolRoot = go.transform;
-                UnityEngine.Object.DontDestroyOnLoad(go);
-            }
-            else
-            {
-                _globalPoolRoot = root;
-            }
+            _container = container;
+            
+            var go = new GameObject("[PoolManager_Root]");
+            _globalPoolRoot = go.transform;
+            UnityEngine.Object.DontDestroyOnLoad(go);
         }
 
         /// <summary>
@@ -66,6 +64,7 @@ namespace TowerDefense.TowerDefense.Utilities.GameObjectPool
                 if (!_pools.TryGetValue(address, out pool))
                 {
                     pool = new GameObjectPool(address, initialSize, _globalPoolRoot);
+                    _container.Inject(pool); // 注入依赖
                     pool.SetRecyclePosition(_recyclePosition, _recycleWorldSpace, applyToExistingReturned: false);
                     _pools[address] = pool;
                     _poolTrackAddressMap[address] = trackInstanceAddress;
@@ -92,6 +91,7 @@ namespace TowerDefense.TowerDefense.Utilities.GameObjectPool
                 if (!_pools.TryGetValue(address, out pool))
                 {
                     pool = new GameObjectPool(address, initialSize, _globalPoolRoot);
+                    _container.Inject(pool); // 注入依赖
                     pool.SetRecyclePosition(_recyclePosition, _recycleWorldSpace, applyToExistingReturned: false);
                     _pools[address] = pool;
                     _poolTrackAddressMap[address] = trackInstanceAddress;

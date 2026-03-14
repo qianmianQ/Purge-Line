@@ -11,11 +11,10 @@ public class GameBootstrapper : MonoBehaviour
 {
     private void Awake()
     {
-        if (GameFramework.Instance != null)
+        if(FindObjectOfType<GameFramework>() != null)
         {
-            DestroyImmediate(GameFramework.Instance.gameObject);
+            return;
         }
-        
         DontDestroyOnLoad(gameObject);
         var fwGo = new GameObject("[GameFramework]")
         {

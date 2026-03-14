@@ -2,7 +2,7 @@ using TowerDefense.ECS;
 using TowerDefense.ECS.Bridge;
 using Unity.Collections;
 using Unity.Entities;
-using UnityDependencyInjection;
+using VContainer;
 
 namespace TowerDefense.ECS
 {
@@ -39,7 +39,12 @@ namespace TowerDefense.ECS
                 if (state.EntityManager.HasComponent<VisualLink>(entity))
                 {
                     var link = state.EntityManager.GetComponentData<VisualLink>(entity);
-                    DependencyManager.Instance.Get<EcsVisualBridgeSystem>().ReturnGameObjectInPool(link.GameObjectRef.Value, link.PrefabAddress.ToString());
+                    var scope = GameLifetimeScope.Instance;
+                    if (scope?.Container != null)
+                    {
+                        scope.Container.Resolve<IEcsVisualBridgeSystem>()
+                            .ReturnGameObjectInPool(link.GameObjectRef.Value, link.PrefabAddress.ToString());
+                    }
                 }
 
                 // 销毁实体

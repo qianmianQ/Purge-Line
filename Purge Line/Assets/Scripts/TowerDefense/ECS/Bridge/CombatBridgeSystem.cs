@@ -5,11 +5,11 @@ using TowerDefense.Components;
 using TowerDefense.ECS;
 using TowerDefense.Data;
 using TowerDefense.Utilities;
-using Unity.Collections;
+using TowerDefense.ECS.Lifecycle;
 using Unity.Entities;
 using Unity.Mathematics;
 using Unity.Transforms;
-using UnityDependencyInjection;
+using VContainer.Unity;
 
 namespace TowerDefense.Bridge
 {
@@ -24,30 +24,37 @@ namespace TowerDefense.Bridge
     ///
     /// 注册到 DependencyManager，在 GridBridgeSystem 之后初始化。
     /// </summary>
-    public class CombatBridgeSystem : IInitializable, IStartable
+    public class CombatBridgeSystem : ICombatBridgeSystem, IInitializable, IStartable, System.IDisposable
     {
         private static ILogger _logger;
+        private readonly IGridBridgeSystem _gridBridge;
         private World _ecsWorld;
         private System.IDisposable _mapLoadedSub;
+        private readonly IEcsWorldAccessor _worldAccessor;
 
         // 战斗是否已初始化
         public bool IsCombatReady { get; private set; }
 
+        public CombatBridgeSystem(IGridBridgeSystem gridBridge, IEcsWorldAccessor worldAccessor)
+        {
+            _gridBridge = gridBridge;
+            _worldAccessor = worldAccessor;
+        }
+
         // ── IInitializable ────────────────────────────────────
 
-        public void OnInit()
+        public void Initialize()
         {
             _logger = GameLogger.Create("CombatBridgeSystem");
             _logger.LogInformation("[CombatBridgeSystem] Initialized");
         }
 
-        public void OnStart()
+        public void Start()
         {
-            _ecsWorld = World.DefaultGameObjectInjectionWorld;
-            if (_ecsWorld == null)
+            _ecsWorld = _worldAccessor.World;
+            if (_ecsWorld == null || !_ecsWorld.IsCreated)
             {
-                _logger.LogError("[CombatBridgeSystem] Default ECS World is null!");
-                return;
+                _logger.LogWarning("[CombatBridgeSystem] ECS World is not ready yet, waiting for lifecycle start");
             }
 
             // 订阅地图加载完成事件
@@ -55,7 +62,7 @@ namespace TowerDefense.Bridge
             _logger.LogInformation("[CombatBridgeSystem] Started, waiting for map load");
         }
 
-        public void OnDispose()
+        public void Dispose()
         {
             _mapLoadedSub?.Dispose();
             CleanupCombatEntities();
@@ -69,17 +76,17 @@ namespace TowerDefense.Bridge
             _logger.LogInformation("[CombatBridgeSystem] Map loaded: {0} ({1}x{2}), initializing combat",
                 evt.LevelId, evt.Width, evt.Height);
 
-            InitializeCombatSingletons(evt);
+            InitializeCombatSingletons();
         }
 
         /// <summary>
         /// 初始化战斗 ECS singleton 数据
         /// </summary>
-        private void InitializeCombatSingletons(GridMapLoadedEvent evt)
+        private void InitializeCombatSingletons()
         {
-            if (_ecsWorld == null || !_ecsWorld.IsCreated) return;
+            if (!TryGetWorld(out var world)) return;
 
-            var em = _ecsWorld.EntityManager;
+            var em = world.EntityManager;
 
             // 清理旧数据
             CleanupCombatEntities();
@@ -88,7 +95,7 @@ namespace TowerDefense.Bridge
             // 注意：使用 EndSimulationEntityCommandBufferSystem 因为此方法可能在 ECS 系统迭代期间被调用
             // 使用 EndSimulationECB 让变更在当前帧结束时自动应用，而不是立即执行
 
-            var ecbSystem = _ecsWorld.GetOrCreateSystemManaged<EndSimulationEntityCommandBufferSystem>();
+            var ecbSystem = world.GetOrCreateSystemManaged<EndSimulationEntityCommandBufferSystem>();
             var ecb = ecbSystem.CreateCommandBuffer();
 
             var spawnTimerEntity = ecb.CreateEntity();
@@ -111,10 +118,9 @@ namespace TowerDefense.Bridge
                 var mapData = mapQuery.GetSingleton<GridMapData>();
 
                 // 从关卡配置获取出生点
-                var bridgeSystem = DependencyManager.Instance.Get<GridBridgeSystem>();
-                if (bridgeSystem != null && bridgeSystem.CurrentLevelId != null)
+                if (_gridBridge != null && _gridBridge.CurrentLevelId != null)
                 {
-                    var levelConfig = LevelConfigLoader.LoadFromResources(bridgeSystem.CurrentLevelId);
+                    var levelConfig = LevelConfigLoader.LoadFromResources(_gridBridge.CurrentLevelId);
                     if (levelConfig?.SpawnPoints != null)
                     {
                         foreach (var sp in levelConfig.SpawnPoints)
@@ -175,13 +181,12 @@ namespace TowerDefense.Bridge
         /// <returns>创建的炮塔 Entity，失败返回 Entity.Null</returns>
         public Entity CreateTower(int2 gridCoord)
         {
-            if (_ecsWorld == null || !_ecsWorld.IsCreated) return Entity.Null;
+            if (!TryGetWorld(out var world)) return Entity.Null;
 
-            var em = _ecsWorld.EntityManager;
-            var bridgeSystem = DependencyManager.Instance.Get<GridBridgeSystem>();
+            var em = world.EntityManager;
 
             // 检查是否可以放置
-            if (!bridgeSystem.CanPlaceAt(gridCoord))
+            if (!_gridBridge.CanPlaceAt(gridCoord))
             {
                 _logger.LogWarning("[CombatBridgeSystem] Cannot place tower at ({0},{1})",
                     gridCoord.x, gridCoord.y);
@@ -189,7 +194,7 @@ namespace TowerDefense.Bridge
             }
 
             // 获取世界坐标
-            float2 worldPos = bridgeSystem.GridToWorld(gridCoord);
+            float2 worldPos = _gridBridge.GridToWorld(gridCoord);
 
             // 创建炮塔实体
             var towerEntity = em.CreateEntity();
@@ -220,7 +225,7 @@ namespace TowerDefense.Bridge
             });
 
             // 标记格子为已占据
-            bridgeSystem.PlaceTower(gridCoord, towerEntity);
+            _gridBridge.PlaceTower(gridCoord, towerEntity);
 
             // 放置炮塔后触发流场重新烘焙（因为格子被占据可能影响寻路）
             // 注意：当前设计中炮塔放置在 Placeable 格子上，不影响 Walkable 路径
@@ -245,9 +250,9 @@ namespace TowerDefense.Bridge
 
         private void CleanupCombatEntities()
         {
-            if (_ecsWorld == null || !_ecsWorld.IsCreated) return;
+            if (!TryGetWorld(out var world)) return;
 
-            var em = _ecsWorld.EntityManager;
+            var em = world.EntityManager;
 
             // 清理 EnemySpawnTimer singleton
             using var timerQuery = em.CreateEntityQuery(ComponentType.ReadOnly<EnemySpawnTimer>());
@@ -258,6 +263,25 @@ namespace TowerDefense.Bridge
 
             IsCombatReady = false;
         }
+
+        private bool TryGetWorld(out World world)
+        {
+            if (_ecsWorld != null && _ecsWorld.IsCreated)
+            {
+                world = _ecsWorld;
+                return true;
+            }
+
+            var lifecycleWorld = _worldAccessor.World;
+            if (lifecycleWorld != null && lifecycleWorld.IsCreated)
+            {
+                _ecsWorld = lifecycleWorld;
+                world = lifecycleWorld;
+                return true;
+            }
+
+            world = null;
+            return false;
+        }
     }
 }
-

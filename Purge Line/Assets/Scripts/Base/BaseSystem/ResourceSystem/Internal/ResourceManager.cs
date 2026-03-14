@@ -12,10 +12,10 @@ using Microsoft.Extensions.Logging;
 using UnityEngine;
 using UnityEngine.AddressableAssets;
 using UnityEngine.ResourceManagement.AsyncOperations;
-using UnityDependencyInjection;
 using PurgeLine.Resource.Diagnostics;
 using PurgeLine.Resource.Extensions;
 using PurgeLine.Resource.ObjectPool;
+using VContainer.Unity;
 using ILogger = Microsoft.Extensions.Logging.ILogger;
 
 namespace PurgeLine.Resource.Internal
@@ -26,7 +26,7 @@ namespace PurgeLine.Resource.Internal
     /// - 实现 IInitializable + ITickable 注册到 DependencyManager
     /// - 纯 C# 类，不依赖 MonoBehaviour
     /// </summary>
-    public sealed class ResourceManager : IResourceManager, IInitializable, IStartable, ITickable
+    public sealed class ResourceManager : IResourceManager, IInitializable, IStartable, ITickable , IDisposable
     {
         // ── 配置 ─────────────────────────────────────────────────
         private readonly ResourceManagerConfig _config;
@@ -103,7 +103,7 @@ namespace PurgeLine.Resource.Internal
         // IInitializable
         // =====================================================================
 
-        public void OnInit()
+        public void Initialize()
         {
             _logger = GameLogger.Create("ResourceManager");
             _metrics = new ResourceMetrics();
@@ -119,7 +119,7 @@ namespace PurgeLine.Resource.Internal
                 _config.MaxConcurrentLoads, _config.LruCapacity, _config.MemoryWarningThresholdMB);
         }
 
-        public void OnDispose()
+        public void Dispose()
         {
             if (_disposed) return;
             _disposed = true;
@@ -151,7 +151,7 @@ namespace PurgeLine.Resource.Internal
         // IStartable
         // =====================================================================
 
-        public void OnStart()
+        public void Start()
         {
             // 延迟初始化逻辑（若有依赖其他系统的情况）
         }
@@ -160,7 +160,7 @@ namespace PurgeLine.Resource.Internal
         // ITickable — 每帧驱动
         // =====================================================================
 
-        public void OnTick(float deltaTime)
+        public void Tick()
         {
             if (_disposed) return;
 
@@ -168,10 +168,10 @@ namespace PurgeLine.Resource.Internal
             ProcessLoadQueue();
 
             // 2. 内存水位检查
-            _memoryGuard.Tick(deltaTime);
+            _memoryGuard.Tick(Time.deltaTime);
 
             // 3. LRU 超时淘汰
-            _lruEvictTimer += deltaTime;
+            _lruEvictTimer += Time.deltaTime;
             if (_lruEvictTimer >= LruEvictInterval)
             {
                 _lruEvictTimer = 0f;
@@ -179,7 +179,7 @@ namespace PurgeLine.Resource.Internal
             }
 
             // 4. 对象池超时回收
-            _poolEvictTimer += deltaTime;
+            _poolEvictTimer += Time.deltaTime;
             if (_poolEvictTimer >= PoolEvictInterval)
             {
                 _poolEvictTimer = 0f;

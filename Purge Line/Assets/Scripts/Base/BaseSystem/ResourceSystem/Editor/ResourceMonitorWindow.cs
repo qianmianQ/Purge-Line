@@ -9,7 +9,6 @@ using UnityEditor;
 using UnityEngine;
 using PurgeLine.Resource.Diagnostics;
 using PurgeLine.Resource.Internal;
-using UnityDependencyInjection;
 
 namespace PurgeLine.Resource.Editor
 {
@@ -188,9 +187,7 @@ namespace PurgeLine.Resource.Editor
 
         private static ResourceManager GetResourceManager()
         {
-            if (!Application.isPlaying) return null;
-            if (DependencyManager.Instance == null) return null;
-            return DependencyManager.Instance.Get<ResourceManager>();
+            return ResourceManagerResolver.TryGet();
         }
     }
 }

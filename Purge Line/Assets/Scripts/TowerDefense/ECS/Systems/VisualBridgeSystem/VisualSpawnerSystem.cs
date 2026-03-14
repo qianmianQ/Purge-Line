@@ -2,7 +2,7 @@ using TowerDefense.ECS.Bridge;
 using Unity.Collections;
 using Unity.Entities;
 using Unity.Transforms;
-using UnityDependencyInjection;
+using VContainer;
 
 namespace TowerDefense.ECS
 {
@@ -30,7 +30,8 @@ namespace TowerDefense.ECS
 
         public void OnUpdate(ref SystemState state)
         {
-            var bridge = DependencyManager.Instance?.Get<EcsVisualBridgeSystem>();
+            var scope = GameLifetimeScope.Instance;
+            var bridge = scope?.Container?.Resolve<IEcsVisualBridgeSystem>();
             if (bridge == null) return;
 
             var entityManager = state.EntityManager;

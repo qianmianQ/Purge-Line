@@ -17,7 +17,9 @@
         "Unity.Entities.Graphics",
         "Unity.ResourceManager",
         "UniTask",
-        "Unity.Addressables"
+        "Unity.Addressables",
+        "VContainer",
+        "Unity.Entities.Hybrid"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

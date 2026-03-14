@@ -3,9 +3,9 @@ using Microsoft.Extensions.Logging;
 using PurgeLine.Events;
 using Unity.Entities;
 using Unity.Mathematics;
-using UnityDependencyInjection;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using VContainer.Unity;
 using ILogger = Microsoft.Extensions.Logging.ILogger;
 
 namespace TowerDefense.Bridge
@@ -22,7 +22,7 @@ namespace TowerDefense.Bridge
     ///
     /// 注册到 DependencyManager 管理生命周期。
     /// </summary>
-    public class TowerPlacementSystem : IInitializable, IStartable, ITickable
+    public class TowerPlacementSystem : IInitializable, IStartable, ITickable, System.IDisposable
     {
         private static ILogger _logger;
 
@@ -46,25 +46,28 @@ namespace TowerDefense.Bridge
         private Mouse _mouse;
 
         // ── 引用 ──────────────────────────────────────────────
-        private GridBridgeSystem _gridBridge;
-        private CombatBridgeSystem _combatBridge;
+        private readonly IGridBridgeSystem _gridBridge;
+        private readonly ICombatBridgeSystem _combatBridge;
+
+        public TowerPlacementSystem(IGridBridgeSystem gridBridge, ICombatBridgeSystem combatBridge)
+        {
+            _gridBridge = gridBridge;
+            _combatBridge = combatBridge;
+        }
 
         // ── IInitializable ────────────────────────────────────
 
-        public void OnInit()
+        public void Initialize()
         {
             _logger = GameLogger.Create("TowerPlacementSystem");
             _logger.LogInformation("[TowerPlacementSystem] Initialized");
         }
 
-        public void OnStart()
+        public void Start()
         {
             _mainCamera = Camera.main;
             _keyboard = Keyboard.current;
             _mouse = Mouse.current;
-
-            _gridBridge = DependencyManager.Instance.Get<GridBridgeSystem>();
-            _combatBridge = DependencyManager.Instance.Get<CombatBridgeSystem>();
 
             if (_gridBridge == null)
                 _logger.LogError("[TowerPlacementSystem] GridBridgeSystem not found!");
@@ -74,7 +77,7 @@ namespace TowerDefense.Bridge
             _logger.LogInformation("[TowerPlacementSystem] Started");
         }
 
-        public void OnDispose()
+        public void Dispose()
         {
             ExitPlacementMode();
             _logger.LogInformation("[TowerPlacementSystem] Disposed");
@@ -82,7 +85,7 @@ namespace TowerDefense.Bridge
 
         // ── ITickable ─────────────────────────────────────────
 
-        public void OnTick(float deltaTime)
+        public void Tick()
         {
             if (_keyboard == null || _mouse == null) return;
 

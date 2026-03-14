@@ -8,7 +8,8 @@ using Cysharp.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using TowerDefense.TowerDefense.Utilities.GameObjectPool;
 using UnityEngine;
-using UnityDependencyInjection;
+using VContainer;
+using VContainer.Unity;
 using ILogger = Microsoft.Extensions.Logging.ILogger;
 
 namespace TowerDefense.ECS.Bridge
@@ -29,18 +30,25 @@ namespace TowerDefense.ECS.Bridge
     /// 使用 EntityQuery + NativeArray 批量同步，避免逐实体 GetComponent。
     /// GameObject 层面使用 ResourceManager 的对象池减少 Instantiate/Destroy 开销。
     /// </summary>
-    public class EcsVisualBridgeSystem : IInitializable
+    public class EcsVisualBridgeSystem : IEcsVisualBridgeSystem, IInitializable, System.IDisposable
     {
         private ILogger _logger;
 
-        private IPoolManager _entityPoolManager;
+        private IGameObjectPoolManager _entityPoolManager;
+        
+        private readonly IObjectResolver _container;
+        
+        public EcsVisualBridgeSystem(IObjectResolver container)
+        {
+            _container = container;
+        }
 
-        public void OnInit()
+        public void Initialize()
         {
             _logger = GameLogger.Create<EcsVisualBridgeSystem>();
             _logger.LogInformation("[EcsVisualBridge] Initialized");
 
-            _entityPoolManager = new PoolManager();
+            _entityPoolManager = _container.Resolve<IGameObjectPoolManager>();
         }
 
         public void InitEntitiesPools(string[] addresses)
@@ -93,7 +101,7 @@ namespace TowerDefense.ECS.Bridge
             obj.SetActive(false);
         }
 
-        public void OnDispose()
+        public void Dispose()
         {
             _entityPoolManager.Clear();
         }

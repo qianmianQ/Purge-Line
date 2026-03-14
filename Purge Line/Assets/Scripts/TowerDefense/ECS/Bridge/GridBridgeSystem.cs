@@ -6,10 +6,11 @@ using TowerDefense.Components;
 using TowerDefense.Data;
 using TowerDefense.Systems;
 using TowerDefense.Utilities;
+using TowerDefense.ECS.Lifecycle;
 using Unity.Collections;
 using Unity.Entities;
 using Unity.Mathematics;
-using UnityDependencyInjection;
+using VContainer.Unity;
 
 namespace TowerDefense.Bridge
 {
@@ -23,16 +24,22 @@ namespace TowerDefense.Bridge
     /// 4. 流场管理（触发重新烘焙等）
     ///
     /// 生命周期：
-    ///   GameFramework.Initialize() → SystemManager.Register<GridBridgeSystem>()
+    ///   GameFramework.Initialize() → 注册 GridBridgeSystem
     ///   → OnInit() → OnStart() → LoadLevel() → ...
     /// </summary>
-    public class GridBridgeSystem : IInitializable, IStartable
+    public class GridBridgeSystem : IGridBridgeSystem, IInitializable, IStartable, System.IDisposable
     {
         private static ILogger _logger;
+        private readonly IEcsWorldAccessor _worldAccessor;
 
         // ── ECS World 引用 ────────────────────────────────────
 
         private World _ecsWorld;
+
+        public GridBridgeSystem(IEcsWorldAccessor worldAccessor)
+        {
+            _worldAccessor = worldAccessor;
+        }
 
         // ── 状态 ──────────────────────────────────────────────
 
@@ -47,8 +54,8 @@ namespace TowerDefense.Bridge
         {
             get
             {
-                if (_ecsWorld == null || !_ecsWorld.IsCreated) return false;
-                var em = _ecsWorld.EntityManager;
+                if (!TryGetWorld(out var world)) return false;
+                var em = world.EntityManager;
                 using var query = em.CreateEntityQuery(ComponentType.ReadOnly<FlowFieldData>());
                 if (query.IsEmpty) return false;
                 var ffData = query.GetSingleton<FlowFieldData>();
@@ -58,25 +65,25 @@ namespace TowerDefense.Bridge
 
         // ── ISystem 生命周期 ──────────────────────────────────
 
-        public void OnInit()
+        public void Initialize()
         {
             _logger = GameLogger.Create("GridBridgeSystem");
             _logger.LogInformation("[GridBridgeSystem] Initialized");
         }
 
-        public void OnStart()
+        public void Start()
         {
-            _ecsWorld = World.DefaultGameObjectInjectionWorld;
-            if (_ecsWorld == null)
+            _ecsWorld = _worldAccessor.World;
+            if (_ecsWorld == null || !_ecsWorld.IsCreated)
             {
-                _logger.LogError("[GridBridgeSystem] Default ECS World is null!");
+                _logger.LogWarning("[GridBridgeSystem] ECS World is not ready yet, waiting for lifecycle start");
                 return;
             }
 
             _logger.LogInformation("[GridBridgeSystem] Started, ECS World ready");
         }
 
-        public void OnDispose()
+        public void Dispose()
         {
             SharedLevelDataStore.Clear();
             _logger.LogInformation("[GridBridgeSystem] Disposed");
@@ -133,7 +140,7 @@ namespace TowerDefense.Bridge
                 return false;
             }
 
-            if (_ecsWorld == null || !_ecsWorld.IsCreated)
+            if (!TryGetWorld(out var world))
             {
                 _logger.LogError("[GridBridgeSystem] ECS World is not available");
                 return false;
@@ -143,7 +150,7 @@ namespace TowerDefense.Bridge
             int dataId = SharedLevelDataStore.Store(config);
 
             // 创建 ECS 请求实体
-            var entityManager = _ecsWorld.EntityManager;
+            var entityManager = world.EntityManager;
             var requestEntity = entityManager.CreateEntity();
             entityManager.AddComponentData(requestEntity, new GridSpawnRequest
             {
@@ -170,9 +177,9 @@ namespace TowerDefense.Bridge
         /// </summary>
         public bool RebakeFlowField()
         {
-            if (_ecsWorld == null || !_ecsWorld.IsCreated) return false;
+            if (!TryGetWorld(out var world)) return false;
 
-            var em = _ecsWorld.EntityManager;
+            var em = world.EntityManager;
             using var query = em.CreateEntityQuery(ComponentType.ReadOnly<GridMapData>());
             if (query.IsEmpty)
             {
@@ -202,10 +209,10 @@ namespace TowerDefense.Bridge
             cellType = CellType.Solid;
             isOccupied = false;
 
-            if (_ecsWorld == null || !_ecsWorld.IsCreated) return false;
+            if (!TryGetWorld(out var world)) return false;
 
             bool found = GridModificationSystem.TryGetCellAtWorldPos(
-                _ecsWorld.EntityManager, worldPos, out gridCoord, out cellType, out var cellState);
+                world.EntityManager, worldPos, out gridCoord, out cellType, out var cellState);
 
             if (found)
                 isOccupied = cellState.IsOccupied;
@@ -218,10 +225,10 @@ namespace TowerDefense.Bridge
         /// </summary>
         public bool PlaceTower(int2 gridCoord, Entity towerEntity)
         {
-            if (_ecsWorld == null || !_ecsWorld.IsCreated) return false;
+            if (!TryGetWorld(out var world)) return false;
 
             bool success = GridModificationSystem.TryPlaceTower(
-                _ecsWorld.EntityManager, gridCoord, towerEntity);
+                world.EntityManager, gridCoord, towerEntity);
 
             if (success)
             {
@@ -241,10 +248,10 @@ namespace TowerDefense.Bridge
         /// </summary>
         public bool RemoveTower(int2 gridCoord)
         {
-            if (_ecsWorld == null || !_ecsWorld.IsCreated) return false;
+            if (!TryGetWorld(out var world)) return false;
 
             bool success = GridModificationSystem.TryRemoveTower(
-                _ecsWorld.EntityManager, gridCoord);
+                world.EntityManager, gridCoord);
 
             if (success)
             {
@@ -264,8 +271,8 @@ namespace TowerDefense.Bridge
         /// </summary>
         public bool CanPlaceAt(int2 gridCoord)
         {
-            if (_ecsWorld == null || !_ecsWorld.IsCreated) return false;
-            return GridModificationSystem.CanPlaceAt(_ecsWorld.EntityManager, gridCoord);
+            if (!TryGetWorld(out var world)) return false;
+            return GridModificationSystem.CanPlaceAt(world.EntityManager, gridCoord);
         }
 
         /// <summary>
@@ -273,9 +280,9 @@ namespace TowerDefense.Bridge
         /// </summary>
         public int2 WorldToGrid(float2 worldPos)
         {
-            if (_ecsWorld == null || !_ecsWorld.IsCreated) return default;
+            if (!TryGetWorld(out var world)) return default;
 
-            var entityManager = _ecsWorld.EntityManager;
+            var entityManager = world.EntityManager;
             using var query = entityManager.CreateEntityQuery(ComponentType.ReadOnly<GridMapData>());
             if (query.IsEmpty) return default;
 
@@ -289,15 +296,35 @@ namespace TowerDefense.Bridge
         /// </summary>
         public float2 GridToWorld(int2 gridCoord)
         {
-            if (_ecsWorld == null || !_ecsWorld.IsCreated) return default;
+            if (!TryGetWorld(out var world)) return default;
 
-            var entityManager = _ecsWorld.EntityManager;
+            var entityManager = world.EntityManager;
             using var query = entityManager.CreateEntityQuery(ComponentType.ReadOnly<GridMapData>());
             if (query.IsEmpty) return default;
 
             var mapData = query.GetSingleton<GridMapData>();
             GridMath.GridToWorld(gridCoord, mapData.Origin, mapData.CellSize, out float2 result);
             return result;
+        }
+
+        private bool TryGetWorld(out World world)
+        {
+            if (_ecsWorld != null && _ecsWorld.IsCreated)
+            {
+                world = _ecsWorld;
+                return true;
+            }
+
+            var lifecycleWorld = _worldAccessor.World;
+            if (lifecycleWorld != null && lifecycleWorld.IsCreated)
+            {
+                _ecsWorld = lifecycleWorld;
+                world = lifecycleWorld;
+                return true;
+            }
+
+            world = null;
+            return false;
         }
     }
 }

@@ -9,7 +9,6 @@ using Cysharp.Threading.Tasks;
 using UnityEditor;
 using UnityEngine;
 using PurgeLine.Resource.Internal;
-using UnityDependencyInjection;
 using Object = UnityEngine.Object;
 
 namespace PurgeLine.Resource.Editor
@@ -190,8 +189,7 @@ namespace PurgeLine.Resource.Editor
 
         private static ResourceManager GetManager()
         {
-            if (!Application.isPlaying || DependencyManager.Instance == null) return null;
-            return DependencyManager.Instance.Get<ResourceManager>();
+            return ResourceManagerResolver.TryGet();
         }
     }
 }

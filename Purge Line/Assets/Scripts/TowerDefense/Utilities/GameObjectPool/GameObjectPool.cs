@@ -3,9 +3,8 @@ using System.Collections.Generic;
 using Cysharp.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using PurgeLine.Resource;
-using PurgeLine.Resource.Internal;
-using UnityDependencyInjection;
 using UnityEngine;
+using VContainer;
 using IDisposable = System.IDisposable;
 // ...existing code...
 using ILogger = Microsoft.Extensions.Logging.ILogger;
@@ -32,7 +31,9 @@ namespace TowerDefense.TowerDefense.Utilities.GameObjectPool
         private bool _useWorldRecyclePosition;
 
         private static readonly ILogger Logger = GameLogger.Create<GameObjectPool>();
-        private ResourceManager _resourceManager;
+
+        [Inject]
+        public IResourceManager ResourceManager { get; set; }
 
         public GameObjectPool(string address, int initialSize, Transform poolRoot)
         {
@@ -51,16 +52,16 @@ namespace TowerDefense.TowerDefense.Utilities.GameObjectPool
 
             try
             {
-                if (CheckResourceManagerReady())
+                if (ResourceManager != null)
                 {
-                    var handle = _resourceManager.LoadAsync<GameObject>(_address).GetAwaiter().GetResult();
+                    var handle = ResourceManager.LoadAsync<GameObject>(_address).GetAwaiter().GetResult();
                     if (handle.IsValid)
                     {
                         lock (_lockObj)
                         {
                             if (_isInitialized)
                             {
-                                _resourceManager.Release(handle);
+                                ResourceManager.Release(handle);
                                 return;
                             }
 
@@ -96,16 +97,16 @@ namespace TowerDefense.TowerDefense.Utilities.GameObjectPool
 
             try
             {
-                if (CheckResourceManagerReady())
+                if (ResourceManager != null)
                 {
-                    var handle = await _resourceManager.LoadAsync<GameObject>(_address);
+                    var handle = await ResourceManager.LoadAsync<GameObject>(_address);
                     if (handle.IsValid)
                     {
                         lock (_lockObj)
                         {
                             if (_isInitialized)
                             {
-                                _resourceManager.Release(handle);
+                                ResourceManager.Release(handle);
                                 return;
                             }
 
@@ -318,9 +319,9 @@ namespace TowerDefense.TowerDefense.Utilities.GameObjectPool
         {
             GameObject go = null;
 
-            if (CheckResourceManagerReady())
+            if (ResourceManager != null)
             {
-                go = _resourceManager.InstantiateSync(_address, _poolRoot);
+                go = ResourceManager.InstantiateSync(_address, _poolRoot);
             }
             else if (_loadedPrefab != null) // 增加降级前的空检查
             {
@@ -344,9 +345,9 @@ namespace TowerDefense.TowerDefense.Utilities.GameObjectPool
         {
             GameObject go = null;
 
-            if (CheckResourceManagerReady())
+            if (ResourceManager != null)
             {
-                go = await _resourceManager.InstantiateAsync(_address, _poolRoot);
+                go = await ResourceManager.InstantiateAsync(_address, _poolRoot);
             }
             else if (_loadedPrefab != null)
             {
@@ -385,13 +386,6 @@ namespace TowerDefense.TowerDefense.Utilities.GameObjectPool
             }
         }
 
-        private bool CheckResourceManagerReady()
-        {
-            if(_resourceManager != null) return true;
-            _resourceManager = DependencyManager.Instance.Get<ResourceManager>();
-            return _resourceManager != null;
-        }
-
         /// <summary>
         /// 清理孤儿对象 (被动调用)
         /// </summary>
@@ -424,9 +418,9 @@ namespace TowerDefense.TowerDefense.Utilities.GameObjectPool
                 _activeInstanceIDs.Clear();
 
                 // 释放资源句柄
-                if (CheckResourceManagerReady() && _prefabHandle.IsValid)
+                if (ResourceManager != null && _prefabHandle.IsValid)
                 {
-                    _resourceManager.Release(_prefabHandle);
+                    ResourceManager.Release(_prefabHandle);
                     _prefabHandle = default;
                 }
 
