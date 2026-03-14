@@ -41,20 +41,20 @@ public static class GameLogger
 
     // ── 快捷调试方法 ────────────────────────────────────────────
 
-    // /// <summary>
-    // /// 直接打印 Trace 级别日志（全局分类）。
-    // /// </summary>
-    // public static void LogTrace(string message, params object[] args)
-    // {
-    //     if(!IsInitialized)
-    //     {
-    //         // 未初始化时直接输出到 Unity Console，避免 EnsureReady 递归
-    //         UnityEngine.Debug.LogFormat(UnityEngine.LogType.Log, UnityEngine.LogOption.NoStacktrace, null,
-    //             "[Global] (GameLogger Uninitialized) " + message, args);
-    //         return;
-    //     }
-    //     _factory.CreateLogger("Global").LogTrace(message, args);
-    // }
+    /// <summary>
+    /// 直接打印 Trace 级别日志（全局分类）。
+    /// </summary>
+    public static void LogTrace(string message, params object[] args)
+    {
+        if(!IsInitialized)
+        {
+            // 未初始化时直接输出到 Unity Console，避免 EnsureReady 递归
+            UnityEngine.Debug.LogFormat(UnityEngine.LogType.Log, UnityEngine.LogOption.NoStacktrace, null,
+                "[Global] (GameLogger Uninitialized) " + message, args);
+            return;
+        }
+        _factory.CreateLogger("Global").LogTrace(message, args);
+    }
 
     /// <summary>
     /// 直接打印 Debug 级别日志（全局分类）。
@@ -70,6 +70,83 @@ public static class GameLogger
         }
         _factory.CreateLogger("Global").LogDebug(message, args);
     }
+    
+    /// <summary>
+    /// 直接打印 Info 级别日志（全局分类）。
+    /// </summary>
+    public static void LogInfo(string message, params object[] args)
+    {
+        if (!IsInitialized)
+        {
+            // 未初始化时直接输出到 Unity Console，避免 EnsureReady 递归
+            UnityEngine.Debug.LogFormat(UnityEngine.LogType.Log, UnityEngine.LogOption.NoStacktrace, null,
+                "[Global] (GameLogger Uninitialized) " + message, args);
+            return;
+        }
+        _factory.CreateLogger("Global").LogInformation(message, args);
+    }
+    
+    /// <summary>
+    /// 直接打印 Debug 级别日志。
+    /// </summary>
+    public static void LogDebug<T>(T t , string message, params object[] args)
+    {
+        if (!IsInitialized)
+        {
+            // 未初始化时直接输出到 Unity Console，避免 EnsureReady 递归
+            UnityEngine.Debug.LogFormat(UnityEngine.LogType.Log, UnityEngine.LogOption.NoStacktrace, null,
+                "[Global] (GameLogger Uninitialized) " + message, args);
+            return;
+        }
+        _factory.CreateLogger<T>().LogDebug(message, args);
+    }
+    
+    /// <summary>
+    /// 直接打印 Info 级别日志。
+    /// </summary>
+    public static void LogInfo<T>(T t, string message, params object[] args)
+    {
+        if (!IsInitialized)
+        {
+            // 未初始化时直接输出到 Unity Console，避免 EnsureReady 递归
+            UnityEngine.Debug.LogFormat(UnityEngine.LogType.Log, UnityEngine.LogOption.NoStacktrace, null,
+                "[Global] (GameLogger Uninitialized) " + message, args);
+            return;
+        }
+        _factory.CreateLogger<T>().LogInformation(message, args);
+    }
+    
+    /// <summary>
+    /// 直接打印 Warning 级别日志。
+    /// </summary>
+    public static void LogWarning<T>(T t, string message, params object[] args)
+    {
+        if (!IsInitialized)
+        {
+            // 未初始化时直接输出到 Unity Console，避免 EnsureReady 递归
+            UnityEngine.Debug.LogFormat(UnityEngine.LogType.Log, UnityEngine.LogOption.NoStacktrace, null,
+                "[Global] (GameLogger Uninitialized) " + message, args);
+            return;
+        }
+        _factory.CreateLogger<T>().LogWarning(message, args);
+    }
+    
+    /// <summary>
+    /// 直接打印 Error 级别日志。
+    /// </summary>
+    public static void LogError<T>(T t, string message, params object[] args)
+    {
+        if (!IsInitialized)
+        {
+            // 未初始化时直接输出到 Unity Console，避免 EnsureReady 递归
+            UnityEngine.Debug.LogFormat(UnityEngine.LogType.Log, UnityEngine.LogOption.NoStacktrace, null,
+                "[Global] (GameLogger Uninitialized) " + message, args);
+            return;
+        }
+        _factory.CreateLogger<T>().LogError(message, args);
+    }
+    
+    
 
     // ── 初始化 ─────────────────────────────────────────────────
 
@@ -200,14 +277,14 @@ public static class GameLogger
     {
 #if UNITY_EDITOR
         logging.SetMinimumLevel(LogLevel.Trace);
+        logging.AddZLoggerUnityDebug();
 #else
         logging.SetMinimumLevel(LogLevel.Information);
 #endif
-        logging.AddZLoggerUnityDebug();
         logging.AddZLoggerRollingFile(options =>
         {
             options.FilePathSelector = (timestamp, seq) =>
-                $"../unity_logs/{timestamp.ToLocalTime():yyyy-MM-dd}_{seq:000}.log";
+                $"unity_logs/{timestamp.ToLocalTime():yyyy-MM-dd}_{seq:000}.log";
             options.RollingInterval = RollingInterval.Day;
             options.RollingSizeKB   = 1024 * 10;
         });

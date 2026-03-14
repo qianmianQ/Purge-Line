@@ -21,7 +21,7 @@ namespace TowerDefense.Editor
     /// - Undo/Redo 支持
     /// - 快捷键绑定
     ///
-    /// 入口：Window > Tower Defense > 关卡编辑器
+    /// 入口：PurgeLine/关卡编辑器
     /// </summary>
     public class GridEditorWindow : EditorWindow
     {
@@ -82,7 +82,7 @@ namespace TowerDefense.Editor
 
         // ── 菜单入口 ─────────────────────────────────────────
 
-        [MenuItem("Window/Tower Defense/关卡编辑器 %#g")]
+        [MenuItem("PurgeLine/关卡编辑器")]
         public static void ShowWindow()
         {
             var window = GetWindow<GridEditorWindow>();

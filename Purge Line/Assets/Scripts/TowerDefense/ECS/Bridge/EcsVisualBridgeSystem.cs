@@ -4,20 +4,11 @@
 // 由 DependencyManager 管理生命周期
 // ============================================================================
 
-using System;
-using System.Collections.Generic;
 using Cysharp.Threading.Tasks;
 using Microsoft.Extensions.Logging;
-using PurgeLine.Resource;
-using PurgeLine.Resource.Internal;
-using TowerDefense.ECS;
 using TowerDefense.TowerDefense.Utilities.GameObjectPool;
-using Unity.Collections;
-using Unity.Entities;
-using Unity.Transforms;
 using UnityEngine;
 using UnityDependencyInjection;
-using IDisposable = System.IDisposable;
 using ILogger = Microsoft.Extensions.Logging.ILogger;
 
 namespace TowerDefense.ECS.Bridge

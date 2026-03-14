@@ -151,12 +151,4 @@ public class GameFramework : MonoBehaviour
 
         _logger.LogInformation("All dependency registered, framework running");
     }
-
-    // ── 内部工具 ──────────────────────────────────────────────
-
-    private void SetState(GameState newState)
-    {
-        _logger.LogDebug("State: {0} -> {1}", State, newState);
-        State = newState;
-    }
 }
