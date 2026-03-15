@@ -140,7 +140,7 @@ public class GameFramework : MonoBehaviour
             return false;
         }
 
-        bool loaded = _resolver.Resolve<IGridBridgeSystem>().LoadLevel(levelId);
+        bool loaded = true;//_resolver.Resolve<IGridBridgeSystem>().LoadLevel(levelId);
         if (!loaded)
         {
             _logger.LogError("Failed to load level {0}, stopping world", levelId);

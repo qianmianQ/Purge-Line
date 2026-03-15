@@ -9,11 +9,11 @@ MonoBehaviour:
   m_GameObject: {fileID: 0}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 0}
+  m_Script: {fileID: 11500000, guid: 457a251f423548af83ee7326f1fdc672, type: 3}
   m_Name: PROJECTILE_SingleEditor
-  m_EditorClassIdentifier: TowerDefense.Editor:TowerDefense.Editor.EntityData:ProjectileConfigEditorAsset
+  m_EditorClassIdentifier: 
   EntityType: 2
-  LocalId: 1
-  EntityIdToken: PROJECTILE_NEW_ENTITY
-  EntityAddress: td/entity/projectile/projectile_new_entity
-  EntityAssetPath: Assets/Data/EntityData/Configs/projectile/projectile_new_entity.bytes
+  LocalId: 2
+  EntityIdToken: PROJECTILE_SDFFF
+  EntityAddress: td/entity/projectile/sdfff
+  EntityAssetPath: Assets/Data/EntityData/Configs/projectile/sdfff.bytes

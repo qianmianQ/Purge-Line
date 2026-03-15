@@ -14,6 +14,6 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   EntityType: 0
   LocalId: 2
-  EntityIdToken: TURRET_NOMAL
-  EntityAddress: td/entity/turret/nomal
-  EntityAssetPath: Assets/Data/EntityData/Configs/turret/nomal.bytes
+  EntityIdToken: TURRET_TEST
+  EntityAddress: td/entity/turret/test
+  EntityAssetPath: Assets/Data/EntityData/Configs/turret/test.bytes

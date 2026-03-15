@@ -17,13 +17,48 @@ MonoBehaviour:
     m_SerializedData: []
   m_GUID: ae553f3f6957d45b0b252b2aaa48ea02
   m_SerializeEntries:
-  - m_GUID: 3a417a70255be407ea0a0db06ad1f4ef
-    m_Address: td/entity/enemy/new_entity
+  - m_GUID: 0080fcf42a0b745268c0492478ad2111
+    m_Address: td/entity/turret/asajijid
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 18dfa02781aa542b590800157fd5f070
+    m_Address: td/blueprint/compiled/projectile_sdfff_20260315132319
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 1b789c9fc9df249cbab3d6fb1f712fc7
+    m_Address: td/blueprint/compiled/turret_asajijid_20260315132126
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 1ff867551446d41169874ce1a13b15f7
+    m_Address: td/blueprint/compiled/turret_test_20260315134709
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 2144fd11aea434224953de01bde60171
+    m_Address: td/blueprint/compiled/enemy_fedwsa_20260315132247
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 3eb41205785a74bf899c20156c584295
     m_Address: Assets/Prefabs/UI/Scene UI/ui tip.prefab
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 51d09253514364fc5bd5f58822ce5fa1
+    m_Address: td/blueprint/source/turret_test_20260315134709
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 5465a14044e714a48b34b2e1ba381a0f
+    m_Address: td/blueprint/source/enemy_fedwsa_20260315132247
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 6915dfb73e62b451eaecee1c39f08b12
+    m_Address: td/blueprint/source/turret_asajijid_20260315132126
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
@@ -37,18 +72,28 @@ MonoBehaviour:
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
-  - m_GUID: 87fd5e557ebed4b01983ffbb8353f3d6
-    m_Address: td/entity/projectile/new_entity
+  - m_GUID: 98791857713cf486993e54daf2a133d0
+    m_Address: td/blueprint/compiled/projectile_fvcdfsv_20260315132306
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
-  - m_GUID: 9a374fa8501fc48eba648268f5aabe29
-    m_Address: td/entity/enemy/enemy_new_entity
+  - m_GUID: 9bb25e31db4af45f1bcbc5aebacc63b3
+    m_Address: td/entity/enemy/fedwsa
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
-  - m_GUID: 9e3a27eef7c124bdd86e20d45bb57ae3
-    m_Address: td/entity/projectile/projectile_new_entity
+  - m_GUID: a1589026f0ac54657b5d6af6e9ef8afe
+    m_Address: td/blueprint/source/projectile_sdfff_20260315132319
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: b192fa372aaad4d67b8baba4c6ba3b88
+    m_Address: td/blueprint/source/projectile_fvcdfsv_20260315132306
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: b44a5f3b6ae1f47f2ba4485c2e195d63
+    m_Address: td/entity/turret/test
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
@@ -57,18 +102,18 @@ MonoBehaviour:
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
-  - m_GUID: d29cb6180ba4e43fba5d3ed835caa2a7
-    m_Address: td/entity/turret/nomal
-    m_ReadOnly: 0
-    m_SerializedLabels: []
-    FlaggedDuringContentUpdateRestriction: 0
-  - m_GUID: de7f65bd42c59456ab9d026ac4b475d8
-    m_Address: td/entity/turret/new_entity
+  - m_GUID: d78ee433a3afb41229fcfdced2e2c26d
+    m_Address: td/entity/projectile/sdfff
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: eed809c01a99443eead895c62a0c2c91
     m_Address: Assets/Data/Levels/level_01.bytes
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: f3caafeac4f074b1cb7b4d7178df9f92
+    m_Address: td/entity/projectile/fvcdfsv
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0

@@ -16,6 +16,16 @@ namespace TowerDefense.Data.EntityData
             return $"td/ui/sprite/{ToSlug(assetName)}";
         }
 
+        public static string BuildBlueprintSourceAddress(string slug)
+        {
+            return $"td/blueprint/source/{ToSlug(slug)}";
+        }
+
+        public static string BuildCompiledBlueprintAddress(string slug)
+        {
+            return $"td/blueprint/compiled/{ToSlug(slug)}";
+        }
+
         public static string ToSlug(string raw)
         {
             if (string.IsNullOrWhiteSpace(raw))

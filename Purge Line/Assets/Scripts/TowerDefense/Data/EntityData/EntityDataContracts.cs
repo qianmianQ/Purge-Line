@@ -7,10 +7,16 @@ namespace TowerDefense.Data.EntityData
     [MemoryPackable(GenerateType.VersionTolerant)]
     public partial class EntityAddressIndex
     {
-        [MemoryPackOrder(1)]
+        private enum FieldOrder : ushort
+        {
+            SchemaVersion = 1,
+            TypeBuckets = 50
+        }
+
+        [MemoryPackOrder((ushort)FieldOrder.SchemaVersion)]
         public int SchemaVersion { get; set; } = 1;
 
-        [MemoryPackOrder(50)]
+        [MemoryPackOrder((ushort)FieldOrder.TypeBuckets)]
         public List<EntityTypeAddressBucket> TypeBuckets { get; set; } = new List<EntityTypeAddressBucket>();
 
         #region Runtime Lookup Cache
@@ -161,49 +167,41 @@ namespace TowerDefense.Data.EntityData
     [MemoryPackable(GenerateType.VersionTolerant)]
     public partial class EntityTypeAddressBucket
     {
-        [MemoryPackOrder(1)]
+        private enum FieldOrder : ushort
+        {
+            EntityType = 1,
+            Items = 50
+        }
+
+        [MemoryPackOrder((ushort)FieldOrder.EntityType)]
         public EntityType EntityType { get; set; }
 
-        [MemoryPackOrder(50)]
+        [MemoryPackOrder((ushort)FieldOrder.Items)]
         public List<EntityAddressItem> Items { get; set; } = new List<EntityAddressItem>();
     }
 
     [MemoryPackable(GenerateType.VersionTolerant)]
     public partial class EntityAddressItem
     {
-        [MemoryPackOrder(1)]
+        private enum FieldOrder : ushort
+        {
+            LocalId = 1,
+            EntityIdToken = 2,
+            EnumName = 3,
+            Address = 50
+        }
+
+        [MemoryPackOrder((ushort)FieldOrder.LocalId)]
         public int LocalId { get; set; }
 
-        [MemoryPackOrder(2)]
+        [MemoryPackOrder((ushort)FieldOrder.EntityIdToken)]
         public string EntityIdToken { get; set; }
 
-        [MemoryPackOrder(3)]
+        [MemoryPackOrder((ushort)FieldOrder.EnumName)]
         public string EnumName { get; set; }
 
-        [MemoryPackOrder(50)]
+        [MemoryPackOrder((ushort)FieldOrder.Address)]
         public string Address { get; set; }
-    }
-
-    [MemoryPackable(GenerateType.VersionTolerant)]
-    public partial class CommonEntityConfigCompatV1
-    {
-        [MemoryPackOrder(1)]
-        public string EntityIdToken { get; set; }
-
-        [MemoryPackOrder(2)]
-        public string Name { get; set; }
-
-        [MemoryPackOrder(3)]
-        public string Description { get; set; }
-
-        [MemoryPackOrder(50)]
-        public string IconAddress { get; set; }
-
-        [MemoryPackOrder(100)]
-        public string EntityBlueprintGuid { get; set; }
-
-        [MemoryPackOrder(200)]
-        public int Version { get; set; }
     }
 
     public interface IEntityConfigPackage
@@ -212,7 +210,9 @@ namespace TowerDefense.Data.EntityData
 
         string EntityIdToken { get; set; }
 
-        string EntityBlueprintGuid { get; set; }
+        string EntityBlueprintAddress { get; set; }
+
+        string CompiledBlueprintAddress { get; set; }
 
         string ExtraSfxAddress { get; set; }
 
@@ -256,4 +256,3 @@ namespace TowerDefense.Data.EntityData
         public string Reason { get; }
     }
 }
-

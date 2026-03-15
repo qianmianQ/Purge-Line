@@ -16,7 +16,7 @@ namespace TowerDefense.Editor.Blueprint
 {
     public sealed class EntityBlueprintEditorWindow : EditorWindow
     {
-        private const string DefaultExtension = "entitybp";
+        private const string DefaultExtension = "bytes";
         private const string LastDirectoryKey = "TowerDefense.EntityBlueprint.LastDirectory";
         private const double AutoSaveIntervalSeconds = 20.0;
 

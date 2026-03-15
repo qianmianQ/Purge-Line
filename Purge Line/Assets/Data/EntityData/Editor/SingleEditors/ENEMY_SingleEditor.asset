@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: ENEMY_SingleEditor
   m_EditorClassIdentifier: 
   EntityType: 1
-  LocalId: 2
-  EntityIdToken: ENEMY_NEW_ENTITY_2
-  EntityAddress: td/entity/enemy/new_entity
-  EntityAssetPath: Assets/Data/EntityData/Configs/enemy/new_entity.bytes
+  LocalId: 1
+  EntityIdToken: ENEMY_FEDWSA
+  EntityAddress: td/entity/enemy/fedwsa
+  EntityAssetPath: Assets/Data/EntityData/Configs/enemy/fedwsa.bytes

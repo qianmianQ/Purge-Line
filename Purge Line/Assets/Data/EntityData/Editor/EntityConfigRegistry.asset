@@ -13,45 +13,38 @@ MonoBehaviour:
   m_Name: EntityConfigRegistry
   m_EditorClassIdentifier: 
   _records:
-  - EntityType: 1
-    LocalId: 1
-    DisplayName: 
-    EntityIdToken: ENEMY_NEW_ENTITY
-    EntityIdEnumName: ENEMY_NEW_ENTITY
-    Address: td/entity/enemy/enemy_new_entity
-    AssetPath: Assets/Data/EntityData/Configs/enemy/enemy_new_entity.bytes
-  - EntityType: 2
-    LocalId: 1
-    DisplayName: PROJECTILE_NEW_ENTITY
-    EntityIdToken: PROJECTILE_NEW_ENTITY
-    EntityIdEnumName: PROJECTILE_NEW_ENTITY
-    Address: td/entity/projectile/projectile_new_entity
-    AssetPath: Assets/Data/EntityData/Configs/projectile/projectile_new_entity.bytes
   - EntityType: 0
     LocalId: 1
-    DisplayName: New Entity
-    EntityIdToken: TURRET_NEW_ENTITY
-    EntityIdEnumName: TURRET_NEW_ENTITY
-    Address: td/entity/turret/new_entity
-    AssetPath: Assets/Data/EntityData/Configs/turret/new_entity.bytes
+    DisplayName: asajijid
+    EntityIdToken: TURRET_ASAJIJID
+    EntityIdEnumName: ASAJIJID
+    Address: td/entity/turret/asajijid
+    AssetPath: Assets/Data/EntityData/Configs/turret/asajijid.bytes
   - EntityType: 1
-    LocalId: 2
-    DisplayName: New Entity
-    EntityIdToken: ENEMY_NEW_ENTITY_2
-    EntityIdEnumName: ENEMY_NEW_ENTITY_2
-    Address: td/entity/enemy/new_entity
-    AssetPath: Assets/Data/EntityData/Configs/enemy/new_entity.bytes
+    LocalId: 1
+    DisplayName: fedwsa
+    EntityIdToken: ENEMY_FEDWSA
+    EntityIdEnumName: FEDWSA
+    Address: td/entity/enemy/fedwsa
+    AssetPath: Assets/Data/EntityData/Configs/enemy/fedwsa.bytes
   - EntityType: 2
     LocalId: 2
-    DisplayName: New Entity
-    EntityIdToken: PROJECTILE_NEW_ENTITY_2
-    EntityIdEnumName: PROJECTILE_NEW_ENTITY_2
-    Address: td/entity/projectile/new_entity
-    AssetPath: Assets/Data/EntityData/Configs/projectile/new_entity.bytes
+    DisplayName: sdfff
+    EntityIdToken: PROJECTILE_SDFFF
+    EntityIdEnumName: SDFFF
+    Address: td/entity/projectile/sdfff
+    AssetPath: Assets/Data/EntityData/Configs/projectile/sdfff.bytes
+  - EntityType: 2
+    LocalId: 1
+    DisplayName: fvcdfsv
+    EntityIdToken: PROJECTILE_FVCDFSV
+    EntityIdEnumName: FVCDFSV
+    Address: td/entity/projectile/fvcdfsv
+    AssetPath: Assets/Data/EntityData/Configs/projectile/fvcdfsv.bytes
   - EntityType: 0
     LocalId: 2
-    DisplayName: nomal
-    EntityIdToken: TURRET_NOMAL
-    EntityIdEnumName: NOMAL
-    Address: td/entity/turret/nomal
-    AssetPath: Assets/Data/EntityData/Configs/turret/nomal.bytes
+    DisplayName: test
+    EntityIdToken: TURRET_TEST
+    EntityIdEnumName: TEST
+    Address: td/entity/turret/test
+    AssetPath: Assets/Data/EntityData/Configs/turret/test.bytes

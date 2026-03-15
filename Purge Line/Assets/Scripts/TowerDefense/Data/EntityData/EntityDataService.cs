@@ -169,7 +169,7 @@ namespace TowerDefense.Data.EntityData
             var package = await LoadPackageByAddressAsync(key, address);
             package.Version += 1;
             package.IsDirty = true;
-            _cache.Set(key, package);
+            _cache[key] = package;
             RaiseChanged(key, address, package, "HotUpdate");
             return true;
         }
@@ -364,12 +364,12 @@ namespace TowerDefense.Data.EntityData
             {
                 _logger.LogError("[EntityDataService] No address mapping for {0}/{1}", entityType, localId);
                 var missing = fallbackFactory(ResolveToken(key), "Address mapping not found in entity index.");
-                _cache.Set(key, missing);
+                _cache[key] = missing;
                 return missing;
             }
 
             var loaded = await LoadPackageByAddressAsync(key, address);
-            _cache.Set(key, loaded);
+            _cache[key] = loaded;
             return cast(loaded) ?? fallbackFactory(ResolveToken(key), "Loaded package type mismatch.");
         }
     }

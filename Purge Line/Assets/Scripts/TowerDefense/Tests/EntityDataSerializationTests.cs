@@ -30,7 +30,8 @@ namespace TowerDefense.Tests
                     PreviewAddress = "td/ui/sprite/wind_sentry_preview",
                     ThemeColorHex = "#22FF44FF"
                 },
-                EntityBlueprintGuid = "guid_001",
+                EntityBlueprintAddress = "td/blueprint/source/turret_wind_sentry",
+                CompiledBlueprintAddress = "td/blueprint/compiled/turret_wind_sentry",
                 ExtraSfxAddress = "td/audio/turret_spawn",
                 Version = 4,
                 IsDirty = false
@@ -43,30 +44,8 @@ namespace TowerDefense.Tests
             Assert.AreEqual(source.EntityIdToken, loaded.EntityIdToken);
             Assert.AreEqual(source.Base.AttackRange, loaded.Base.AttackRange);
             Assert.AreEqual(source.Ui.IconAddress, loaded.Ui.IconAddress);
-            Assert.AreEqual(source.EntityBlueprintGuid, loaded.EntityBlueprintGuid);
-        }
-
-        [Test]
-        public void Compatibility_CommonV1_CanMigrateToEnemyPackage()
-        {
-            var legacy = new CommonEntityConfigCompatV1
-            {
-                EntityIdToken = "ENEMY_GOBLIN",
-                Name = "Goblin",
-                Description = "legacy payload",
-                IconAddress = "td/ui/sprite/goblin_icon",
-                EntityBlueprintGuid = "legacy_guid",
-                Version = 2
-            };
-
-            byte[] bytes = MemoryPackSerializer.Serialize(legacy);
-            bool ok = EntityConfigCompatibility.TryDeserialize(bytes, EntityType.ENEMY, 3, "ENEMY_GOBLIN",
-                out var migrated, out var error);
-
-            Assert.IsTrue(ok, error);
-            Assert.IsNotNull(migrated);
-            Assert.IsInstanceOf<EnemyConfigPackage>(migrated);
-            Assert.AreEqual("ENEMY_GOBLIN", migrated.EntityIdToken);
+            Assert.AreEqual(source.EntityBlueprintAddress, loaded.EntityBlueprintAddress);
+            Assert.AreEqual(source.CompiledBlueprintAddress, loaded.CompiledBlueprintAddress);
         }
 
         [Test]

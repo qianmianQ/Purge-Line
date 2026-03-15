@@ -4,24 +4,23 @@ namespace TowerDefense.Data.EntityData
     public enum TurretId
     {
         None = 0,
-        TURRET_NEW_ENTITY = 1,
-        NOMAL = 2,
+        ASAJIJID = 1,
+        TEST = 2,
         Max = 3
     }
 
     public enum EnemyId
     {
         None = 0,
-        ENEMY_NEW_ENTITY = 1,
-        ENEMY_NEW_ENTITY_2 = 2,
-        Max = 3
+        FEDWSA = 1,
+        Max = 2
     }
 
     public enum ProjectileId
     {
         None = 0,
-        PROJECTILE_NEW_ENTITY = 1,
-        PROJECTILE_NEW_ENTITY_2 = 2,
+        FVCDFSV = 1,
+        SDFFF = 2,
         Max = 3
     }
 

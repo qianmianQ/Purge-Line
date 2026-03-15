@@ -111,6 +111,20 @@ namespace TowerDefense.Data.EntityData
         /// </summary>
         public IEnumerable<TKey> Keys => _cache.Keys;
 
+        /// <summary>
+        /// 索引器：获取或设置缓存项
+        /// </summary>
+        public TValue this[TKey key]
+        {
+            get
+            {
+                if (TryGetValue(key, out var value))
+                    return value;
+                throw new KeyNotFoundException($"Key '{key}' not found in cache.");
+            }
+            set => Set(key, value);
+        }
+
         private class CacheItem
         {
             public TKey Key { get; }

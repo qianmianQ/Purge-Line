@@ -4,10 +4,13 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Security.Cryptography;
+using System.Text;
 using MemoryPack;
 using TowerDefense.Data.Blueprint;
 using TowerDefense.Data.EntityData;
 using TowerDefense.Editor.Blueprint;
+using Unity.Entities;
 using UnityEditor;
 using UnityEngine;
 
@@ -25,12 +28,70 @@ namespace TowerDefense.Editor.EntityData
         public string Message { get; }
     }
 
+    public class FullValidationResult
+    {
+        public bool IsValid => Errors.Count == 0;
+        public List<string> Errors { get; } = new List<string>();
+        public List<string> Warnings { get; } = new List<string>();
+        public int MissingAddressablesCount { get; set; }
+        public int InvalidBlueprintCount { get; set; }
+        public int MissingInIndexCount { get; set; }
+        public int BasicErrorCount { get; set; }
+
+        public string GetSummary()
+        {
+            var sb = new StringBuilder();
+            sb.AppendLine($"验证结果: {(IsValid ? "通过" : "失败")}");
+            sb.AppendLine($"错误数: {Errors.Count}, 警告数: {Warnings.Count}");
+
+            if (BasicErrorCount > 0)
+                sb.AppendLine($"  - 基础错误: {BasicErrorCount}");
+            if (MissingAddressablesCount > 0)
+                sb.AppendLine($"  - Addressables缺失: {MissingAddressablesCount}");
+            if (InvalidBlueprintCount > 0)
+                sb.AppendLine($"  - 蓝图无效: {InvalidBlueprintCount}");
+            if (MissingInIndexCount > 0)
+                sb.AppendLine($"  - 索引缺失: {MissingInIndexCount}");
+
+            return sb.ToString();
+        }
+
+        public string GetFullMessage()
+        {
+            var sb = new StringBuilder();
+            sb.AppendLine(GetSummary());
+
+            if (Errors.Count > 0)
+            {
+                sb.AppendLine("\n错误详情:");
+                foreach (var error in Errors.Take(50))
+                    sb.AppendLine($"  - {error}");
+                if (Errors.Count > 50)
+                    sb.AppendLine($"  ... (还有 {Errors.Count - 50} 个错误)");
+            }
+
+            if (Warnings.Count > 0)
+            {
+                sb.AppendLine("\n警告:");
+                foreach (var warning in Warnings.Take(20))
+                    sb.AppendLine($"  - {warning}");
+                if (Warnings.Count > 20)
+                    sb.AppendLine($"  ... (还有 {Warnings.Count - 20} 个警告)");
+            }
+
+            return sb.ToString();
+        }
+    }
+
     public static class EntityDataEditorUtility
     {
         public const string RegistryAssetPath = "Assets/Data/EntityData/Editor/EntityConfigRegistry.asset";
         public const string SingleEditorAssetDir = "Assets/Data/EntityData/Editor/SingleEditors";
         public const string ConfigBytesRoot = "Assets/Data/EntityData/Configs";
+        public const string BlueprintSourceRoot = "Assets/Data/EntityData/Blueprints";
         public const string IndexBytesPath = "Assets/Data/EntityData/entity_index.bytes";
+        public const string BlueprintSourceExtension = ".bytes";
+        public const string BlueprintCompiledSuffix = ".compiled.bytes";
 
         public static EntityConfigRegistryAsset GetOrCreateRegistry()
         {
@@ -247,19 +308,47 @@ namespace TowerDefense.Editor.EntityData
 
         public static EntityValidationResult ValidateAll(EntityConfigRegistryAsset registry)
         {
-            var messages = new List<string>();
-            bool success = true;
+            var fullResult = ValidateAllFull(registry);
+            return new EntityValidationResult(fullResult.IsValid, fullResult.GetFullMessage());
+        }
 
+        public static FullValidationResult ValidateAllFull(EntityConfigRegistryAsset registry)
+        {
+            var result = new FullValidationResult();
+
+            // 1. 基础校验 + Addressables + 蓝图
             foreach (var record in registry.MutableRecords)
             {
+                // 基础校验
                 var itemResult = ValidateRecord(registry, record);
                 if (!itemResult.IsValid)
                 {
-                    success = false;
-                    messages.Add($"[{record.EntityType}/{record.EntityIdToken}] {itemResult.Message}");
+                    result.BasicErrorCount++;
+                    result.Errors.Add($"[{record.EntityType}/{record.EntityIdToken}] {itemResult.Message}");
+                    continue;
+                }
+
+                // Addressables 校验
+                if (!ValidateAddressableExists(record.AssetPath, record.Address, out var addrError))
+                {
+                    result.MissingAddressablesCount++;
+                    result.Errors.Add($"[{record.EntityType}/{record.EntityIdToken}] Addressables: {addrError}");
+                }
+
+                // 蓝图校验（源蓝图 address + 编译产物 address + hash）
+                var package = LoadPackageFromRecord(record);
+                if (string.IsNullOrWhiteSpace(package.EntityBlueprintAddress) &&
+                    string.IsNullOrWhiteSpace(package.CompiledBlueprintAddress))
+                    continue;
+
+                if (!ValidateBlueprintComplete(package.EntityBlueprintAddress, package.CompiledBlueprintAddress, out var bpError))
+                {
+                    result.InvalidBlueprintCount++;
+                    result.Errors.Add($"[{record.EntityType}/{record.EntityIdToken}] 蓝图: {bpError}");
                 }
             }
 
+            // 2. 重复 Address 校验
             var duplicateAddressGroups = registry.MutableRecords
                 .Where(x => !string.IsNullOrWhiteSpace(x.Address))
                 .GroupBy(x => x.Address, StringComparer.Ordinal)
@@ -267,18 +356,300 @@ namespace TowerDefense.Editor.EntityData
                 .ToList();
             if (duplicateAddressGroups.Count > 0)
             {
-                success = false;
                 foreach (var group in duplicateAddressGroups)
                 {
                     string members = string.Join(", ",
                         group.Select(x => $"{x.EntityType}/{x.EntityIdToken}"));
-                    messages.Add($"重复Address: {group.Key} -> {members}");
+                    result.Errors.Add($"重复Address: {group.Key} -> {members}");
                 }
             }
 
-            return success
-                ? new EntityValidationResult(true, "全量校验通过")
-                : new EntityValidationResult(false, string.Join("\n", messages));
+            // 3. 索引完整性校验
+            if (!ValidateIndexIntegrity(registry, out var missingRecords))
+            {
+                result.MissingInIndexCount = missingRecords.Count;
+                foreach (var record in missingRecords)
+                {
+                    result.Errors.Add($"[{record.EntityType}/{record.EntityIdToken}] 索引缺失");
+                }
+            }
+
+            return result;
+        }
+
+        public static bool ValidateAddressableExists(string assetPath, string desiredAddress, out string error)
+        {
+            error = string.Empty;
+            if (string.IsNullOrWhiteSpace(assetPath))
+            {
+                error = "AssetPath 为空";
+                return false;
+            }
+
+            string guid = AssetDatabase.AssetPathToGUID(assetPath);
+            if (string.IsNullOrWhiteSpace(guid))
+            {
+                error = $"Asset GUID not found: {assetPath}";
+                return false;
+            }
+
+            Type settingsDefaultType = Type.GetType(
+                "UnityEditor.AddressableAssets.AddressableAssetSettingsDefaultObject, Unity.Addressables.Editor");
+            if (settingsDefaultType == null)
+            {
+                error = "Unity.Addressables.Editor assembly not found.";
+                return false;
+            }
+
+            PropertyInfo settingsProp = settingsDefaultType.GetProperty("Settings", BindingFlags.Public | BindingFlags.Static);
+            object settings = settingsProp?.GetValue(null);
+            if (settings == null)
+            {
+                error = "AddressableAssetSettings not found.";
+                return false;
+            }
+
+            Type settingsType = settings.GetType();
+            MethodInfo findEntryMethod = settingsType.GetMethod("FindAssetEntry", new[] { typeof(string) });
+            object entry = findEntryMethod?.Invoke(settings, new object[] { guid });
+
+            if (entry == null)
+            {
+                error = $"Addressable entry not found for GUID: {guid}";
+                return false;
+            }
+
+            PropertyInfo addressProp = entry.GetType().GetProperty("address", BindingFlags.Public | BindingFlags.Instance);
+            string actualAddress = addressProp?.GetValue(entry) as string;
+
+            if (!string.Equals(actualAddress, desiredAddress, StringComparison.Ordinal))
+            {
+                error = $"Address 不匹配 (期望: {desiredAddress}, 实际: {actualAddress})";
+                return false;
+            }
+
+            return true;
+        }
+
+        public static bool ValidateBlueprintComplete(string sourceAddress, string compiledAddress, out string error)
+        {
+            error = string.Empty;
+            if (!TryResolveAssetPathByAddress(sourceAddress, out string sourcePath, out string sourceError))
+            {
+                error = $"源蓝图地址无效: {sourceError}";
+                return false;
+            }
+
+            if (!sourcePath.EndsWith(BlueprintSourceExtension, StringComparison.OrdinalIgnoreCase))
+            {
+                error = $"源蓝图文件后缀必须为 {BlueprintSourceExtension}: {sourcePath}";
+                return false;
+            }
+
+            if (AssetDatabase.LoadAssetAtPath<TextAsset>(sourcePath) == null)
+            {
+                error = $"源蓝图无法通过 AssetDatabase 加载: {sourcePath}";
+                return false;
+            }
+
+            EntityBlueprintDocument doc;
+            byte[] sourceBytes;
+            try
+            {
+                sourceBytes = File.ReadAllBytes(Path.GetFullPath(sourcePath));
+                doc = EntityBlueprintBinarySerializer.Load(Path.GetFullPath(sourcePath));
+            }
+            catch (Exception ex)
+            {
+                error = $"源蓝图读取失败: {ex.Message}";
+                return false;
+            }
+
+            if (doc == null)
+            {
+                error = "源蓝图反序列化失败";
+                return false;
+            }
+
+            if (!TryResolveAssetPathByAddress(compiledAddress, out string compiledPath, out string compiledError))
+            {
+                error = $"编译蓝图地址无效: {compiledError}";
+                return false;
+            }
+
+            if (!compiledPath.EndsWith(BlueprintCompiledSuffix, StringComparison.OrdinalIgnoreCase))
+            {
+                error = $"编译蓝图文件后缀必须为 {BlueprintCompiledSuffix}: {compiledPath}";
+                return false;
+            }
+
+            if (AssetDatabase.LoadAssetAtPath<TextAsset>(compiledPath) == null)
+            {
+                error = $"编译蓝图无法通过 AssetDatabase 加载: {compiledPath}";
+                return false;
+            }
+
+            CompiledBlueprint compiled;
+            try
+            {
+                var compiledBytes = File.ReadAllBytes(Path.GetFullPath(compiledPath));
+                compiled = MemoryPackSerializer.Deserialize<CompiledBlueprint>(compiledBytes);
+            }
+            catch (Exception ex)
+            {
+                error = $"编译蓝图读取失败: {ex.Message}";
+                return false;
+            }
+
+            if (compiled == null)
+            {
+                error = "编译蓝图反序列化失败";
+                return false;
+            }
+
+            string expectedHash = ComputeBlueprintHash(sourceBytes);
+            if (!string.Equals(compiled.blueprintHash, expectedHash, StringComparison.Ordinal))
+            {
+                error = "蓝图 hash 不匹配，需要重新编译";
+                return false;
+            }
+
+            return true;
+        }
+
+        public static bool ValidateIndexIntegrity(EntityConfigRegistryAsset registry, out List<EntityConfigRegistryRecord> missingRecords)
+        {
+            missingRecords = new List<EntityConfigRegistryRecord>();
+
+            string indexAbsolutePath = Path.GetFullPath(IndexBytesPath);
+            if (!File.Exists(indexAbsolutePath))
+            {
+                missingRecords.AddRange(registry.MutableRecords);
+                return false;
+            }
+
+            try
+            {
+                byte[] bytes = File.ReadAllBytes(indexAbsolutePath);
+                var index = MemoryPackSerializer.Deserialize<EntityAddressIndex>(bytes);
+                if (index == null)
+                {
+                    missingRecords.AddRange(registry.MutableRecords);
+                    return false;
+                }
+
+                index.BuildLookupCache();
+
+                foreach (var record in registry.MutableRecords)
+                {
+                    if (record.LocalId <= 0)
+                        continue;
+
+                    if (!index.TryGetAddressFast(record.EntityType, record.LocalId, out _))
+                    {
+                        missingRecords.Add(record);
+                    }
+                }
+            }
+            catch
+            {
+                missingRecords.AddRange(registry.MutableRecords);
+                return false;
+            }
+
+            return missingRecords.Count == 0;
+        }
+
+        public class RebuildReport
+        {
+            public int RemovedMissingFiles { get; set; }
+            public int ClearedInvalidBlueprints { get; set; }
+            public int FixedAddressables { get; set; }
+            public List<string> Details { get; } = new List<string>();
+
+            public string GetSummary()
+            {
+                var sb = new System.Text.StringBuilder();
+                sb.AppendLine("重建完成:");
+                if (RemovedMissingFiles > 0)
+                    sb.AppendLine($"  - 删除缺失文件记录: {RemovedMissingFiles}");
+                if (ClearedInvalidBlueprints > 0)
+                    sb.AppendLine($"  - 清理无效蓝图引用: {ClearedInvalidBlueprints}");
+                if (FixedAddressables > 0)
+                    sb.AppendLine($"  - 修复 Addressables: {FixedAddressables}");
+                if (RemovedMissingFiles == 0 && ClearedInvalidBlueprints == 0 && FixedAddressables == 0)
+                    sb.AppendLine("  - 无需清理");
+                return sb.ToString();
+            }
+        }
+
+        public static RebuildReport FullRebuildRegistry(EntityConfigRegistryAsset registry)
+        {
+            var report = new RebuildReport();
+
+            // 1. 移除文件不存在的记录
+            var recordsToRemove = new List<EntityConfigRegistryRecord>();
+            foreach (var record in registry.MutableRecords)
+            {
+                if (string.IsNullOrWhiteSpace(record.AssetPath))
+                {
+                    recordsToRemove.Add(record);
+                    report.Details.Add($"[{record.EntityType}/{record.EntityIdToken}] 移除: AssetPath 为空");
+                    continue;
+                }
+
+                string absolutePath = Path.GetFullPath(record.AssetPath);
+                if (!File.Exists(absolutePath))
+                {
+                    recordsToRemove.Add(record);
+                    report.Details.Add($"[{record.EntityType}/{record.EntityIdToken}] 移除: 文件不存在 {record.AssetPath}");
+                }
+            }
+
+            foreach (var record in recordsToRemove)
+            {
+                registry.MutableRecords.Remove(record);
+                report.RemovedMissingFiles++;
+            }
+
+            // 2. 修复无效的静态编译蓝图（自动重编译）
+            foreach (var record in registry.MutableRecords)
+            {
+                var package = LoadPackageFromRecord(record);
+                if (!string.IsNullOrWhiteSpace(package.EntityBlueprintAddress) ||
+                    !string.IsNullOrWhiteSpace(package.CompiledBlueprintAddress))
+                {
+                    if (!ValidateBlueprintComplete(package.EntityBlueprintAddress, package.CompiledBlueprintAddress, out _))
+                    {
+                        TryCompileBlueprintForRecord(record, package, out _);
+                        report.ClearedInvalidBlueprints++;
+                        report.Details.Add($"[{record.EntityType}/{record.EntityIdToken}] 重编译静态蓝图");
+                    }
+                }
+            }
+
+            // 3. 修复 Addressables
+            foreach (var record in registry.MutableRecords)
+            {
+                if (!ValidateAddressableExists(record.AssetPath, record.Address, out _))
+                {
+                    try
+                    {
+                        EnsureAddressableAddress(record.AssetPath, record.Address);
+                        report.FixedAddressables++;
+                        report.Details.Add($"[{record.EntityType}/{record.EntityIdToken}] 修复 Addressables");
+                    }
+                    catch
+                    {
+                        // 忽略，继续下一个
+                    }
+                }
+            }
+
+            // 4. 重新生成枚举和索引
+            SaveRegistry(registry);
+
+            return report;
         }
 
         public static void RefreshGeneratedArtifacts(EntityConfigRegistryAsset registry)
@@ -347,29 +718,404 @@ namespace TowerDefense.Editor.EntityData
             return EnsureAddressableAddress(path, $"td/asset/{EntityDataAddressRules.ToSlug(asset.name)}");
         }
 
-        public static bool TryPickBlueprintGuid(out string guid)
+        public sealed class BlueprintBatchCompileReport
         {
-            string absolutePath = EditorUtility.OpenFilePanel("Select Entity Blueprint", Application.dataPath, "entitybp");
+            public int Total;
+            public int Compiled;
+            public int Skipped;
+            public int Failed;
+            public List<string> Details { get; } = new List<string>();
+
+            public string GetSummary()
+            {
+                return $"蓝图编译结果: total={Total}, compiled={Compiled}, skipped={Skipped}, failed={Failed}";
+            }
+        }
+
+        public static BlueprintBatchCompileReport CompileAllBlueprints(EntityConfigRegistryAsset registry)
+        {
+            return CompileBlueprints(registry, true);
+        }
+
+        public static BlueprintBatchCompileReport CompileIncrementalBlueprints(EntityConfigRegistryAsset registry)
+        {
+            return CompileBlueprints(registry, false);
+        }
+
+        public static bool RunBlueprintPreflight(bool forceAll, out string report)
+        {
+            var registry = GetOrCreateRegistry();
+            var compileReport = forceAll ? CompileAllBlueprints(registry) : CompileIncrementalBlueprints(registry);
+            var validateResult = ValidateAllFull(registry);
+            report = compileReport.GetSummary() + "\n" + validateResult.GetSummary();
+            return compileReport.Failed == 0 && validateResult.IsValid;
+        }
+
+        private static BlueprintBatchCompileReport CompileBlueprints(EntityConfigRegistryAsset registry, bool forceRecompile)
+        {
+            var report = new BlueprintBatchCompileReport();
+
+            foreach (var record in registry.MutableRecords)
+            {
+                report.Total++;
+                var package = LoadPackageFromRecord(record);
+
+                if (string.IsNullOrWhiteSpace(package.EntityBlueprintAddress))
+                {
+                    report.Skipped++;
+                    continue;
+                }
+
+                if (!forceRecompile &&
+                    ValidateBlueprintComplete(package.EntityBlueprintAddress, package.CompiledBlueprintAddress, out _))
+                {
+                    report.Skipped++;
+                    continue;
+                }
+
+                if (!TryCompileBlueprintForRecord(record, package, out string detail))
+                {
+                    report.Failed++;
+                    report.Details.Add($"[{record.EntityType}/{record.EntityIdToken}] {detail}");
+                    continue;
+                }
+
+                report.Compiled++;
+            }
+
+            SaveRegistry(registry);
+            return report;
+        }
+
+        public static bool TryCompileBlueprintForRecord(EntityConfigRegistryRecord record, out string detail)
+        {
+            var package = LoadPackageFromRecord(record);
+            return TryCompileBlueprintForRecord(record, package, out detail);
+        }
+
+        public static bool TryCompileBlueprintByToken(string entityIdToken, out string detail)
+        {
+            var registry = GetOrCreateRegistry();
+            var record = registry.MutableRecords.FirstOrDefault(x =>
+                string.Equals(x.EntityIdToken, entityIdToken, StringComparison.Ordinal));
+            if (record == null)
+            {
+                detail = $"Record not found: {entityIdToken}";
+                return false;
+            }
+
+            bool success = TryCompileBlueprintForRecord(record, out detail);
+            if (success)
+                SaveRegistry(registry);
+            return success;
+        }
+
+        public static bool TryInstantiateFromCompiledBlueprintByToken(string entityIdToken, out string detail)
+        {
+            var registry = GetOrCreateRegistry();
+            var record = registry.MutableRecords.FirstOrDefault(x =>
+                string.Equals(x.EntityIdToken, entityIdToken, StringComparison.Ordinal));
+            if (record == null)
+            {
+                detail = $"Record not found: {entityIdToken}";
+                return false;
+            }
+
+            var package = LoadPackageFromRecord(record);
+            if (string.IsNullOrWhiteSpace(package.CompiledBlueprintAddress))
+            {
+                detail = "Compiled Blueprint Address 为空，请先点击【编译蓝图】。";
+                return false;
+            }
+
+            if (!TryResolveAssetPathByAddress(package.CompiledBlueprintAddress, out string compiledAssetPath, out string error))
+            {
+                detail = $"编译蓝图地址解析失败: {error}";
+                return false;
+            }
+
+            TextAsset compiledAsset = AssetDatabase.LoadAssetAtPath<TextAsset>(compiledAssetPath);
+            if (compiledAsset == null || compiledAsset.bytes == null || compiledAsset.bytes.Length == 0)
+            {
+                detail = $"编译蓝图资源无效: {compiledAssetPath}";
+                return false;
+            }
+
+            CompiledBlueprint compiled;
+            try
+            {
+                compiled = MemoryPackSerializer.Deserialize<CompiledBlueprint>(compiledAsset.bytes);
+            }
+            catch (Exception ex)
+            {
+                detail = $"编译蓝图反序列化失败: {ex.Message}";
+                return false;
+            }
+
+            if (compiled == null)
+            {
+                detail = "编译蓝图反序列化结果为空。";
+                return false;
+            }
+
+            World world = GetOrCreateEditorWorld(out bool createdNewWorld);
+            string blueprintId = string.IsNullOrWhiteSpace(compiled.blueprintId)
+                ? entityIdToken
+                : compiled.blueprintId;
+
+            var runtimeRegistry = new BlueprintRegistry();
+            if (!runtimeRegistry.TryLoad(blueprintId, compiledAsset.bytes, world.EntityManager, out string loadError))
+            {
+                detail = $"静态实例化失败（加载）: {loadError}";
+                return false;
+            }
+
+            if (!runtimeRegistry.TryGetPrefab(blueprintId, out Entity prefabEntity))
+            {
+                detail = "静态实例化失败：无法获取 PrefabEntity。";
+                return false;
+            }
+
+            Entity instance = world.EntityManager.Instantiate(prefabEntity);
+            detail = createdNewWorld
+                ? $"静态实例化成功：已创建世界 '{world.Name}'，实体={instance.Index}:{instance.Version}"
+                : $"静态实例化成功：世界 '{world.Name}'，实体={instance.Index}:{instance.Version}";
+            return true;
+        }
+
+        private static World GetOrCreateEditorWorld(out bool createdNewWorld)
+        {
+            World world = World.DefaultGameObjectInjectionWorld;
+            if (world != null && world.IsCreated)
+            {
+                createdNewWorld = false;
+                return world;
+            }
+
+            world = new World("PurgeLine.EditorBlueprintPreviewWorld", WorldFlags.Game);
+            var systems = DefaultWorldInitialization.GetAllSystems(WorldSystemFilterFlags.Default);
+            DefaultWorldInitialization.AddSystemsToRootLevelSystemGroups(world, systems);
+            World.DefaultGameObjectInjectionWorld = world;
+            createdNewWorld = true;
+            return world;
+        }
+
+        private static bool TryCompileBlueprintForRecord(EntityConfigRegistryRecord record, IEntityConfigPackage package,
+            out string detail)
+        {
+            detail = string.Empty;
+            if (string.IsNullOrWhiteSpace(package.EntityBlueprintAddress))
+            {
+                detail = "源蓝图 Address 为空";
+                return false;
+            }
+
+            if (!TryResolveAssetPathByAddress(package.EntityBlueprintAddress, out string sourceAssetPath, out string error))
+            {
+                detail = $"源蓝图不存在: {error}";
+                return false;
+            }
+
+            try
+            {
+                string sourceAbsolutePath = Path.GetFullPath(sourceAssetPath);
+                byte[] sourceBytes = File.ReadAllBytes(sourceAbsolutePath);
+                string blueprintHash = ComputeBlueprintHash(sourceBytes);
+
+                var doc = EntityBlueprintBinarySerializer.Load(sourceAbsolutePath);
+                if (doc == null)
+                {
+                    detail = "源蓝图反序列化为空";
+                    return false;
+                }
+
+                byte[] compiledBytes = BlueprintCompiler.CompileToBytes(doc, blueprintHash);
+
+                string compiledAssetPath = BuildCompiledBlueprintAssetPath(sourceAssetPath);
+                EnsureAssetDirectory(compiledAssetPath);
+                File.WriteAllBytes(Path.GetFullPath(compiledAssetPath), compiledBytes);
+                AssetDatabase.ImportAsset(compiledAssetPath, ImportAssetOptions.ForceSynchronousImport);
+
+                string sourceSlug = BuildBlueprintSlugFromAssetPath(sourceAssetPath);
+                string compiledAddress = EntityDataAddressRules.BuildCompiledBlueprintAddress(sourceSlug);
+                package.CompiledBlueprintAddress = EnsureAddressableAddress(compiledAssetPath, compiledAddress);
+                SavePackageToFile(package, record.AssetPath);
+
+                detail = $"编译成功: {compiledAssetPath}";
+                return true;
+            }
+            catch (Exception ex)
+            {
+                detail = ex.Message;
+                return false;
+            }
+        }
+
+        public static string BuildCompiledBlueprintAssetPath(string sourceAssetPath)
+        {
+            string normalized = sourceAssetPath.Replace('\\', '/');
+            if (normalized.EndsWith(BlueprintSourceExtension, StringComparison.OrdinalIgnoreCase))
+                normalized = normalized.Substring(0, normalized.Length - BlueprintSourceExtension.Length);
+            return normalized + BlueprintCompiledSuffix;
+        }
+
+        public static string BuildBlueprintSlugFromAssetPath(string assetPath)
+        {
+            string normalized = (assetPath ?? string.Empty).Replace('\\', '/');
+            string rootPrefix = BlueprintSourceRoot + "/";
+            if (normalized.StartsWith(rootPrefix, StringComparison.OrdinalIgnoreCase))
+                normalized = normalized.Substring(rootPrefix.Length);
+
+            if (normalized.EndsWith(BlueprintSourceExtension, StringComparison.OrdinalIgnoreCase))
+                normalized = normalized.Substring(0, normalized.Length - BlueprintSourceExtension.Length);
+
+            return EntityDataAddressRules.ToSlug(normalized.Replace('/', '_'));
+        }
+
+        public static string ComputeBlueprintHash(byte[] sourceBytes)
+        {
+            if (sourceBytes == null)
+                return string.Empty;
+
+            byte[] versionBytes = Encoding.UTF8.GetBytes($"|compiler:{CompiledBlueprint.CurrentVersion}");
+            byte[] merged = new byte[sourceBytes.Length + versionBytes.Length];
+            Buffer.BlockCopy(sourceBytes, 0, merged, 0, sourceBytes.Length);
+            Buffer.BlockCopy(versionBytes, 0, merged, sourceBytes.Length, versionBytes.Length);
+            using SHA256 sha256 = SHA256.Create();
+            byte[] hash = sha256.ComputeHash(merged);
+            return BitConverter.ToString(hash).Replace("-", string.Empty);
+        }
+
+        public static bool TryResolveAssetPathByAddress(string address, out string assetPath, out string error)
+        {
+            assetPath = string.Empty;
+            error = string.Empty;
+            string matchedGuid = string.Empty;
+            if (string.IsNullOrWhiteSpace(address))
+            {
+                error = "Address 为空";
+                return false;
+            }
+
+            if (!TryGetAddressableSettings(out object settings, out Type settingsType, out error))
+                return false;
+
+            PropertyInfo groupsProp = settingsType.GetProperty("groups", BindingFlags.Public | BindingFlags.Instance);
+            if (groupsProp?.GetValue(settings) is not System.Collections.IEnumerable groups)
+            {
+                error = "Addressables groups 获取失败";
+                return false;
+            }
+
+            foreach (object group in groups)
+            {
+                if (group == null)
+                    continue;
+
+                PropertyInfo entriesProp = group.GetType().GetProperty("entries", BindingFlags.Public | BindingFlags.Instance);
+                if (entriesProp?.GetValue(group) is not System.Collections.IEnumerable entries)
+                    continue;
+
+                foreach (object entry in entries)
+                {
+                    if (entry == null)
+                        continue;
+
+                    PropertyInfo addressProp = entry.GetType().GetProperty("address", BindingFlags.Public | BindingFlags.Instance);
+                    string currentAddress = addressProp?.GetValue(entry) as string;
+                    if (!string.Equals(currentAddress, address, StringComparison.Ordinal))
+                        continue;
+
+                    PropertyInfo guidProp = entry.GetType().GetProperty("guid", BindingFlags.Public | BindingFlags.Instance);
+                    string guid = guidProp?.GetValue(entry) as string;
+                    if (string.IsNullOrWhiteSpace(guid))
+                    {
+                        error = $"Address '{address}' 对应 GUID 为空";
+                        return false;
+                    }
+
+                    if (string.IsNullOrWhiteSpace(matchedGuid))
+                    {
+                        matchedGuid = guid;
+                        continue;
+                    }
+
+                    if (!string.Equals(matchedGuid, guid, StringComparison.Ordinal))
+                    {
+                        error = $"Address '{address}' 重复映射到多个资源 GUID";
+                        return false;
+                    }
+                }
+            }
+
+            if (string.IsNullOrWhiteSpace(matchedGuid))
+            {
+                error = $"Address '{address}' 未找到";
+                return false;
+            }
+
+            assetPath = AssetDatabase.GUIDToAssetPath(matchedGuid);
+            if (string.IsNullOrWhiteSpace(assetPath))
+            {
+                error = $"Address '{address}' 对应 GUID 无效";
+                return false;
+            }
+
+            return true;
+        }
+
+        private static bool TryGetAddressableSettings(out object settings, out Type settingsType, out string error)
+        {
+            settings = null;
+            settingsType = null;
+            error = string.Empty;
+
+            Type settingsDefaultType = Type.GetType(
+                "UnityEditor.AddressableAssets.AddressableAssetSettingsDefaultObject, Unity.Addressables.Editor");
+            if (settingsDefaultType == null)
+            {
+                error = "Unity.Addressables.Editor assembly not found.";
+                return false;
+            }
+
+            PropertyInfo settingsProp = settingsDefaultType.GetProperty("Settings", BindingFlags.Public | BindingFlags.Static);
+            settings = settingsProp?.GetValue(null);
+            if (settings == null)
+            {
+                error = "AddressableAssetSettings not found.";
+                return false;
+            }
+
+            settingsType = settings.GetType();
+            return true;
+        }
+
+        public static bool TryPickBlueprintAddress(out string address)
+        {
+            string absolutePath = EditorUtility.OpenFilePanel("Select Entity Blueprint", Application.dataPath, "bytes");
             if (string.IsNullOrWhiteSpace(absolutePath))
             {
-                guid = string.Empty;
+                address = string.Empty;
                 return false;
             }
 
             if (!TryConvertAbsolutePathToAssetPath(absolutePath, out string assetPath))
             {
-                guid = string.Empty;
+                address = string.Empty;
                 return false;
             }
 
-            guid = AssetDatabase.AssetPathToGUID(assetPath);
-            return !string.IsNullOrWhiteSpace(guid);
+            string slug = BuildBlueprintSlugFromAssetPath(assetPath);
+            string desiredAddress = EntityDataAddressRules.BuildBlueprintSourceAddress(slug);
+            address = EnsureAddressableAddress(assetPath, desiredAddress);
+            return !string.IsNullOrWhiteSpace(address);
         }
 
         public static string CreateAndOpenBlueprint(string entityIdToken)
         {
-            string fileName = $"{EntityDataAddressRules.ToSlug(entityIdToken)}_{DateTime.Now:yyyyMMddHHmmss}.entitybp";
-            string targetAssetPath = $"Assets/Data/EntityData/Blueprints/{fileName}";
+            string slug = $"{EntityDataAddressRules.ToSlug(entityIdToken)}_{DateTime.Now:yyyyMMddHHmmss}";
+            string fileName = $"{slug}{BlueprintSourceExtension}";
+            string targetAssetPath = $"{BlueprintSourceRoot}/{fileName}";
             EnsureAssetDirectory(targetAssetPath);
 
             string absolutePath = Path.GetFullPath(targetAssetPath);
@@ -377,43 +1123,39 @@ namespace TowerDefense.Editor.EntityData
             EntityBlueprintBinarySerializer.Save(absolutePath, document);
             AssetDatabase.Refresh();
 
-            string guid = AssetDatabase.AssetPathToGUID(targetAssetPath);
+            string sourceAddress = EnsureAddressableAddress(targetAssetPath, EntityDataAddressRules.BuildBlueprintSourceAddress(slug));
             EntityBlueprintEditorWindow.OpenAndLoad(absolutePath);
-            return guid;
+            return sourceAddress;
         }
 
-        public static bool IsBlueprintGuidValid(string guid)
+        public static bool IsBlueprintAddressValid(string address)
         {
-            if (string.IsNullOrWhiteSpace(guid))
+            if (string.IsNullOrWhiteSpace(address))
                 return false;
 
-            string assetPath = AssetDatabase.GUIDToAssetPath(guid);
-            if (string.IsNullOrWhiteSpace(assetPath))
+            if (!TryResolveAssetPathByAddress(address, out string assetPath, out _))
                 return false;
 
             string absolutePath = Path.GetFullPath(assetPath);
             return File.Exists(absolutePath);
         }
 
-        public static bool OpenBlueprintByGuid(string guid)
+        public static bool OpenBlueprintByAddress(string address)
         {
-            if (string.IsNullOrWhiteSpace(guid)) return false;
-            string assetPath = AssetDatabase.GUIDToAssetPath(guid);
-            if (string.IsNullOrWhiteSpace(assetPath)) return false;
+            if (!TryResolveAssetPathByAddress(address, out string assetPath, out _)) return false;
             string absolutePath = Path.GetFullPath(assetPath);
             if (!File.Exists(absolutePath)) return false;
             EntityBlueprintEditorWindow.OpenAndLoad(absolutePath);
             return true;
         }
 
-        public static string GetBlueprintSummary(string guid)
+        public static string GetBlueprintSummary(string address)
         {
-            if (string.IsNullOrWhiteSpace(guid))
+            if (string.IsNullOrWhiteSpace(address))
                 return "未关联蓝图";
-            string path = AssetDatabase.GUIDToAssetPath(guid);
-            if (string.IsNullOrWhiteSpace(path))
-                return $"蓝图 GUID: {guid} (路径无效)";
-            return $"蓝图 GUID: {guid}\n路径: {path}";
+            if (!TryResolveAssetPathByAddress(address, out string path, out string error))
+                return $"蓝图 Address: {address} (路径无效: {error})";
+            return $"蓝图 Address: {address}\n路径: {path}";
         }
 
         private static void SaveTypedEditorCore(EntityConfigRegistryAsset registry, ScriptableObject editorAsset, IEntityConfigPackage package)

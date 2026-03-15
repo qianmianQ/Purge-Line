@@ -17,6 +17,8 @@ namespace TowerDefense.Editor.EntityData
         private TextField _searchField;
         private ScrollView _content;
         private string _searchKeyword = string.Empty;
+        private Label _indexStatusLabel;
+        private bool? _lastIndexValidState;
 
         [MenuItem("PurgeLine/Entity Data Hub")]
         public static void Open()
@@ -26,6 +28,36 @@ namespace TowerDefense.Editor.EntityData
             window.Show();
         }
 
+        private void OnEnable()
+        {
+            // 窗口激活时进行静默校验
+            SilentValidateAndUpdateStatus();
+        }
+
+        private void SilentValidateAndUpdateStatus()
+        {
+            try
+            {
+                var registry = EntityDataEditorUtility.GetOrCreateRegistry();
+                var fullResult = EntityDataEditorUtility.ValidateAllFull(registry);
+                UpdateIndexStatusLabel(fullResult.IsValid);
+
+                if (!fullResult.IsValid)
+                {
+                    Debug.Log($"[EntityDataHub] 索引校验发现问题:\n{fullResult.GetSummary()}");
+                }
+                else
+                {
+                    Debug.Log("[EntityDataHub] 索引校验通过");
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError($"[EntityDataHub] 静默校验失败: {ex.Message}");
+                UpdateIndexStatusLabel(false);
+            }
+        }
+
         private void CreateGUI()
         {
             rootVisualElement.Clear();
@@ -33,6 +65,8 @@ namespace TowerDefense.Editor.EntityData
             _content = new ScrollView { style = { flexGrow = 1f } };
             rootVisualElement.Add(_content);
             Refresh();
+            // 首次打开时进行静默校验
+            SilentValidateAndUpdateStatus();
         }
 
         private void BuildToolbar()
@@ -86,6 +120,33 @@ namespace TowerDefense.Editor.EntityData
             fullValidateButton.style.marginLeft = 6f;
             row1.Add(fullValidateButton);
 
+            var compileAllButton = new Button(DoCompileAllBlueprints) { text = "全量编译（强制全部编译）" };
+            compileAllButton.style.minWidth = 170f;
+            compileAllButton.style.marginLeft = 6f;
+            row1.Add(compileAllButton);
+
+            var compileIncrementalButton = new Button(DoCompileIncrementalBlueprints) { text = "增量编译（对比哈希）" };
+            compileIncrementalButton.style.minWidth = 160f;
+            compileIncrementalButton.style.marginLeft = 6f;
+            row1.Add(compileIncrementalButton);
+
+            var fullRebuildButton = new Button(DoFullRebuild) { text = "全量重建" };
+            fullRebuildButton.style.minWidth = 96f;
+            fullRebuildButton.style.marginLeft = 6f;
+            row1.Add(fullRebuildButton);
+
+            // 索引状态标签
+            _indexStatusLabel = new Label("索引状态: 待校验")
+            {
+                style =
+                {
+                    marginLeft = 12f,
+                    unityFontStyleAndWeight = FontStyle.Bold
+                }
+            };
+            UpdateIndexStatusLabel(null);
+            row1.Add(_indexStatusLabel);
+
             var expandAllButton = new Button(() => SetAllTypeFoldoutState(true)) { text = "全部展开" };
             expandAllButton.style.minWidth = 88f;
             row2.Add(expandAllButton);
@@ -99,6 +160,29 @@ namespace TowerDefense.Editor.EntityData
             toolbar.Add(row2);
 
             rootVisualElement.Add(toolbar);
+        }
+
+        private void UpdateIndexStatusLabel(bool? isValid)
+        {
+            _lastIndexValidState = isValid;
+            if (_indexStatusLabel == null)
+                return;
+
+            if (!isValid.HasValue)
+            {
+                _indexStatusLabel.text = "索引状态: 待校验";
+                _indexStatusLabel.style.color = new Color(0.8f, 0.8f, 0.8f);
+            }
+            else if (isValid.Value)
+            {
+                _indexStatusLabel.text = "索引状态: ✅ 有效";
+                _indexStatusLabel.style.color = new Color(0.45f, 0.8f, 0.45f);
+            }
+            else
+            {
+                _indexStatusLabel.text = "索引状态: ❌ 无效";
+                _indexStatusLabel.style.color = new Color(0.84f, 0.25f, 0.25f);
+            }
         }
 
         private void SetAllTypeFoldoutState(bool expanded)
@@ -305,11 +389,79 @@ namespace TowerDefense.Editor.EntityData
             return entityFoldout;
         }
 
-        private static void DoFullValidation()
+        private void DoFullValidation()
         {
             var registry = EntityDataEditorUtility.GetOrCreateRegistry();
-            var result = EntityDataEditorUtility.ValidateAll(registry);
-            EditorUtility.DisplayDialog("全量校验", result.Message, "确定");
+            var fullResult = EntityDataEditorUtility.ValidateAllFull(registry);
+            UpdateIndexStatusLabel(fullResult.IsValid);
+            EditorUtility.DisplayDialog("全量校验", fullResult.GetFullMessage(), "确定");
+        }
+
+        private void DoCompileAllBlueprints()
+        {
+            var registry = EntityDataEditorUtility.GetOrCreateRegistry();
+            var result = EntityDataEditorUtility.CompileAllBlueprints(registry);
+            Refresh();
+            string msg = result.GetSummary();
+            if (result.Details.Count > 0)
+                msg += "\n\n" + string.Join("\n", result.Details.Take(30));
+            EditorUtility.DisplayDialog("全量编译", msg, "确定");
+        }
+
+        private void DoCompileIncrementalBlueprints()
+        {
+            var registry = EntityDataEditorUtility.GetOrCreateRegistry();
+            var result = EntityDataEditorUtility.CompileIncrementalBlueprints(registry);
+            Refresh();
+            string msg = result.GetSummary();
+            if (result.Details.Count > 0)
+                msg += "\n\n" + string.Join("\n", result.Details.Take(30));
+            EditorUtility.DisplayDialog("增量编译", msg, "确定");
+        }
+
+        private void DoFullRebuild()
+        {
+            var registry = EntityDataEditorUtility.GetOrCreateRegistry();
+
+            // 1. 先进行全量校验
+            var fullResult = EntityDataEditorUtility.ValidateAllFull(registry);
+
+            // 2. 显示确认对话框
+            string message = fullResult.IsValid
+                ? "索引校验通过，确认要全量重建吗？\n这将：\n  - 删除缺失文件的记录\n  - 清理无效蓝图引用\n  - 修复 Addressables\n  - 重新生成枚举代码和索引"
+                : $"发现以下问题：\n{fullResult.GetSummary()}\n\n重建将尝试修复这些问题，是否继续？";
+
+            bool confirm = EditorUtility.DisplayDialog(
+                "全量重建确认",
+                message,
+                "确认重建",
+                "取消");
+
+            if (!confirm)
+                return;
+
+            // 3. 执行重建
+            try
+            {
+                var rebuildReport = EntityDataEditorUtility.FullRebuildRegistry(registry);
+                UpdateIndexStatusLabel(true);
+                Refresh();
+
+                string resultMsg = rebuildReport.GetSummary();
+                if (rebuildReport.Details.Count > 0)
+                {
+                    resultMsg += "\n\n详情:\n" + string.Join("\n", rebuildReport.Details.Take(30));
+                    if (rebuildReport.Details.Count > 30)
+                        resultMsg += $"\n... (还有 {rebuildReport.Details.Count - 30} 条)";
+                }
+
+                EditorUtility.DisplayDialog("全量重建完成", resultMsg, "确定");
+            }
+            catch (Exception ex)
+            {
+                UpdateIndexStatusLabel(false);
+                EditorUtility.DisplayDialog("全量重建失败", $"重建过程中发生错误：\n{ex.Message}\n\n{ex.StackTrace}", "确定");
+            }
         }
 
         private void UpdateCreateHint(EntityConfigRegistryAsset registry, EntityType type)
