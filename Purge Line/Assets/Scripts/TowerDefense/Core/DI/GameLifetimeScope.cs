@@ -1,6 +1,7 @@
 using System;
 using PurgeLine.Resource;
 using TowerDefense.Bridge;
+using TowerDefense.Data.EntityData;
 using TowerDefense.ECS.Bridge;
 using TowerDefense.ECS.Lifecycle;
 using TowerDefense.TowerDefense.Utilities.GameObjectPool;
@@ -64,5 +65,6 @@ public class GameLifetimeScope : LifetimeScope
         builder.RegisterEntryPoint<TowerPlacementSystem>();
         builder.RegisterEntryPoint<EcsVisualBridgeSystem>().As<IEcsVisualBridgeSystem>();
         builder.Register<GameObjectPoolManager>(Lifetime.Transient).As<IGameObjectPoolManager>();
+        builder.Register<EntityDataService>(Lifetime.Singleton).As<IEntityDataService>().AsSelf();
     }
 }

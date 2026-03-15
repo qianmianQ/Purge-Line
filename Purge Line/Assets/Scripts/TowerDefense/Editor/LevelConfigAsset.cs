@@ -1,4 +1,5 @@
 using System;
+using MemoryPack;
 using TowerDefense.Components;
 using TowerDefense.Data;
 using UnityEngine;
@@ -12,119 +13,126 @@ namespace TowerDefense.Editor
     /// 内部数据与 LevelConfig 双向同步，支持 Inspector 编辑和导出为 MemoryPack .bytes。
     /// </summary>
     [CreateAssetMenu(fileName = "NewLevelConfig", menuName = "TowerDefense/Level Config Asset")]
-    public class LevelConfigAsset : ScriptableObject
+    public class LevelConfigAsset : ScriptableObject, ISerializationCallbackReceiver
     {
-        [Header("关卡信息")]
-        [Tooltip("关卡唯一标识符")]
-        public string levelId = "level_01";
+        [SerializeField, HideInInspector]
+        private byte[] _serializedLevelConfig;
 
-        [Tooltip("关卡显示名称")]
-        public string displayName = "Level 01";
+        [NonSerialized]
+        private LevelConfig _levelConfig;
 
-        [TextArea(2, 4)]
-        [Tooltip("关卡描述")]
-        public string description = "";
+        public LevelConfig LevelConfig
+        {
+            get
+            {
+                EnsureLevelConfig();
+                return _levelConfig;
+            }
+            set
+            {
+                _levelConfig = value;
+                NormalizeLevelConfig();
+            }
+        }
 
-        [Tooltip("配置版本号")]
-        public int version = 1;
+        private void EnsureLevelConfig()
+        {
+            if (_levelConfig == null)
+            {
+                _levelConfig = LevelConfig.CreateEmpty("level_01", 20, 15);
+            }
 
-        [Header("地图参数")]
-        [Range(1, 500)]
-        [Tooltip("地图宽度（格子数）")]
-        public int width = 20;
+            NormalizeLevelConfig();
+        }
 
-        [Range(1, 500)]
-        [Tooltip("地图高度（格子数）")]
-        public int height = 15;
+        private void NormalizeLevelConfig()
+        {
+            if (_levelConfig == null)
+                return;
 
-        [Range(0.1f, 10f)]
-        [Tooltip("单个格子的世界尺寸")]
-        public float cellSize = 1.0f;
+            _levelConfig.LevelId ??= "level_01";
+            _levelConfig.Version = Mathf.Max(1, _levelConfig.Version);
+            _levelConfig.Width = Mathf.Max(1, _levelConfig.Width);
+            _levelConfig.Height = Mathf.Max(1, _levelConfig.Height);
+            _levelConfig.CellSize = Mathf.Max(0.01f, _levelConfig.CellSize);
+            _levelConfig.DisplayName ??= _levelConfig.LevelId;
+            _levelConfig.Description ??= string.Empty;
+            _levelConfig.SpawnPoints ??= Array.Empty<Vector2>();
+            _levelConfig.GoalPoints ??= Array.Empty<Vector2>();
 
-        [Tooltip("地图原点 X 坐标")]
-        public float originX = 0f;
+            EnsureCellsArrayInternal();
+        }
 
-        [Tooltip("地图原点 Y 坐标")]
-        public float originY = 0f;
+        private void EnsureCellsArrayInternal()
+        {
+            int expectedLength = _levelConfig.Width * _levelConfig.Height;
+            if (_levelConfig.Cells == null || _levelConfig.Cells.Length != expectedLength)
+            {
+                var oldCells = _levelConfig.Cells;
+                _levelConfig.Cells = new byte[expectedLength];
 
-        [Header("格子数据")]
-        [HideInInspector]
-        public byte[] cells;
-
-        [Header("路径点")]
-        [Tooltip("出生点（格子坐标）")]
-        public Vector2[] spawnPoints = Array.Empty<Vector2>();
-
-        [Tooltip("目标点（格子坐标）")]
-        public Vector2[] goalPoints = Array.Empty<Vector2>();
-
-        [Header("预烘焙流场（可选）")]
-        [HideInInspector]
-        public byte[] bakedFlowFieldDirections;
-
-        [HideInInspector]
-        public uint bakedFlowFieldDataHash;
-
-        [HideInInspector]
-        public int bakedFlowFieldVersion;
+                if (oldCells != null)
+                {
+                    int copyLength = Math.Min(oldCells.Length, expectedLength);
+                    Array.Copy(oldCells, _levelConfig.Cells, copyLength);
+                }
+            }
+        }
 
         // ── 格子数据操作 ──────────────────────────────────────
 
         /// <summary>确保格子数组尺寸正确</summary>
         public void EnsureCellsArray()
         {
-            int expectedLength = width * height;
-            if (cells == null || cells.Length != expectedLength)
-            {
-                var oldCells = cells;
-                cells = new byte[expectedLength];
-
-                // 复制旧数据（尽可能保留）
-                if (oldCells != null)
-                {
-                    int copyLength = Math.Min(oldCells.Length, expectedLength);
-                    Array.Copy(oldCells, cells, copyLength);
-                }
-            }
+            EnsureLevelConfig();
+            EnsureCellsArrayInternal();
         }
 
         /// <summary>获取指定坐标的格子类型</summary>
         public CellType GetCellType(int x, int y)
         {
-            if (x < 0 || x >= width || y < 0 || y >= height) return CellType.Solid;
-            EnsureCellsArray();
-            return (CellType)cells[y * width + x];
+            EnsureLevelConfig();
+            var config = _levelConfig;
+            if (x < 0 || x >= config.Width || y < 0 || y >= config.Height) return CellType.Solid;
+            EnsureCellsArrayInternal();
+            return (CellType)config.Cells[y * config.Width + x];
         }
 
         /// <summary>设置指定坐标的格子类型</summary>
         public void SetCellType(int x, int y, CellType cellType)
         {
-            if (x < 0 || x >= width || y < 0 || y >= height) return;
-            EnsureCellsArray();
-            cells[y * width + x] = (byte)cellType;
+            EnsureLevelConfig();
+            var config = _levelConfig;
+            if (x < 0 || x >= config.Width || y < 0 || y >= config.Height) return;
+            EnsureCellsArrayInternal();
+            config.Cells[y * config.Width + x] = (byte)cellType;
         }
 
         /// <summary>填充全部格子为指定类型</summary>
         public void FillAll(CellType cellType)
         {
-            EnsureCellsArray();
+            EnsureLevelConfig();
+            var config = _levelConfig;
+            EnsureCellsArrayInternal();
             byte fill = (byte)cellType;
-            for (int i = 0; i < cells.Length; i++)
-                cells[i] = fill;
+            for (int i = 0; i < config.Cells.Length; i++)
+                config.Cells[i] = fill;
         }
 
         /// <summary>填充矩形区域</summary>
         public void FillRect(int startX, int startY, int endX, int endY, CellType cellType)
         {
-            EnsureCellsArray();
+            EnsureLevelConfig();
+            var config = _levelConfig;
+            EnsureCellsArrayInternal();
             int minX = Math.Max(0, Math.Min(startX, endX));
-            int maxX = Math.Min(width - 1, Math.Max(startX, endX));
+            int maxX = Math.Min(config.Width - 1, Math.Max(startX, endX));
             int minY = Math.Max(0, Math.Min(startY, endY));
-            int maxY = Math.Min(height - 1, Math.Max(startY, endY));
+            int maxY = Math.Min(config.Height - 1, Math.Max(startY, endY));
 
             for (int y = minY; y <= maxY; y++)
                 for (int x = minX; x <= maxX; x++)
-                    cells[y * width + x] = (byte)cellType;
+                    config.Cells[y * config.Width + x] = (byte)cellType;
         }
 
         // ── 与 LevelConfig 转换 ──────────────────────────────
@@ -132,27 +140,43 @@ namespace TowerDefense.Editor
         /// <summary>转换为运行时 LevelConfig</summary>
         public LevelConfig ToLevelConfig()
         {
-            EnsureCellsArray();
-            var copy = new byte[cells.Length];
-            Array.Copy(cells, copy, cells.Length);
+            EnsureLevelConfig();
+            var config = _levelConfig;
+            EnsureCellsArrayInternal();
+            var copy = new byte[config.Cells.Length];
+            Array.Copy(config.Cells, copy, config.Cells.Length);
+
+            Vector2[] spawnPoints = config.SpawnPoints ?? Array.Empty<Vector2>();
+            Vector2[] goalPoints = config.GoalPoints ?? Array.Empty<Vector2>();
+            var spawnCopy = new Vector2[spawnPoints.Length];
+            var goalCopy = new Vector2[goalPoints.Length];
+            Array.Copy(spawnPoints, spawnCopy, spawnPoints.Length);
+            Array.Copy(goalPoints, goalCopy, goalPoints.Length);
+
+            byte[] bakedDirectionsCopy = null;
+            if (config.BakedFlowFieldDirections != null)
+            {
+                bakedDirectionsCopy = new byte[config.BakedFlowFieldDirections.Length];
+                Array.Copy(config.BakedFlowFieldDirections, bakedDirectionsCopy, config.BakedFlowFieldDirections.Length);
+            }
 
             return new LevelConfig
             {
-                LevelId = levelId,
-                Version = version,
-                Width = width,
-                Height = height,
-                CellSize = cellSize,
-                OriginX = originX,
-                OriginY = originY,
+                LevelId = config.LevelId,
+                Version = config.Version,
+                Width = config.Width,
+                Height = config.Height,
+                CellSize = config.CellSize,
+                OriginX = config.OriginX,
+                OriginY = config.OriginY,
                 Cells = copy,
-                SpawnPoints = spawnPoints ?? Array.Empty<Vector2>(),
-                GoalPoints = goalPoints ?? Array.Empty<Vector2>(),
-                DisplayName = displayName,
-                Description = description,
-                BakedFlowFieldDirections = bakedFlowFieldDirections,
-                BakedFlowFieldDataHash = bakedFlowFieldDataHash,
-                BakedFlowFieldVersion = bakedFlowFieldVersion
+                SpawnPoints = spawnCopy,
+                GoalPoints = goalCopy,
+                DisplayName = config.DisplayName,
+                Description = config.Description,
+                BakedFlowFieldDirections = bakedDirectionsCopy,
+                BakedFlowFieldDataHash = config.BakedFlowFieldDataHash,
+                BakedFlowFieldVersion = config.BakedFlowFieldVersion
             };
         }
 
@@ -161,33 +185,80 @@ namespace TowerDefense.Editor
         {
             if (config == null) return;
 
-            levelId = config.LevelId;
-            version = config.Version;
-            width = config.Width;
-            height = config.Height;
-            cellSize = config.CellSize;
-            originX = config.OriginX;
-            originY = config.OriginY;
-            displayName = config.DisplayName ?? config.LevelId;
-            description = config.Description ?? string.Empty;
-            spawnPoints = config.SpawnPoints ?? Array.Empty<Vector2>();
-            goalPoints = config.GoalPoints ?? Array.Empty<Vector2>();
-            bakedFlowFieldDirections = config.BakedFlowFieldDirections;
-            bakedFlowFieldDataHash = config.BakedFlowFieldDataHash;
-            bakedFlowFieldVersion = config.BakedFlowFieldVersion;
+            var copy = new LevelConfig
+            {
+                LevelId = config.LevelId,
+                Version = config.Version,
+                Width = config.Width,
+                Height = config.Height,
+                CellSize = config.CellSize,
+                OriginX = config.OriginX,
+                OriginY = config.OriginY,
+                Cells = config.Cells != null ? (byte[])config.Cells.Clone() : null,
+                SpawnPoints = config.SpawnPoints != null ? (Vector2[])config.SpawnPoints.Clone() : Array.Empty<Vector2>(),
+                GoalPoints = config.GoalPoints != null ? (Vector2[])config.GoalPoints.Clone() : Array.Empty<Vector2>(),
+                DisplayName = config.DisplayName ?? config.LevelId,
+                Description = config.Description ?? string.Empty,
+                BakedFlowFieldDirections = config.BakedFlowFieldDirections != null ? (byte[])config.BakedFlowFieldDirections.Clone() : null,
+                BakedFlowFieldDataHash = config.BakedFlowFieldDataHash,
+                BakedFlowFieldVersion = config.BakedFlowFieldVersion
+            };
 
-            cells = new byte[config.Cells.Length];
-            Array.Copy(config.Cells, cells, config.Cells.Length);
+            LevelConfig = copy;
+            SyncSerializedData();
+        }
+
+        public void Save()
+        {
+            SyncSerializedData();
+#if UNITY_EDITOR
+            UnityEditor.EditorUtility.SetDirty(this);
+            UnityEditor.AssetDatabase.SaveAssetIfDirty(this);
+#endif
+        }
+
+        public void OnBeforeSerialize()
+        {
+            SyncSerializedData();
+        }
+
+        public void OnAfterDeserialize()
+        {
+            if (_serializedLevelConfig == null || _serializedLevelConfig.Length == 0)
+            {
+                EnsureLevelConfig();
+                return;
+            }
+
+            try
+            {
+                _levelConfig = MemoryPackSerializer.Deserialize<LevelConfig>(_serializedLevelConfig);
+            }
+            catch
+            {
+                _levelConfig = null;
+            }
+
+            EnsureLevelConfig();
+        }
+
+        private void SyncSerializedData()
+        {
+            EnsureLevelConfig();
+            _serializedLevelConfig = MemoryPackSerializer.Serialize(_levelConfig);
         }
 
         // ── Unity 生命周期 ────────────────────────────────────
 
         private void OnValidate()
         {
-            width = Math.Max(1, width);
-            height = Math.Max(1, height);
-            cellSize = Math.Max(0.01f, cellSize);
-            EnsureCellsArray();
+            EnsureLevelConfig();
+            SyncSerializedData();
+        }
+
+        private void OnEnable()
+        {
+            EnsureLevelConfig();
         }
     }
 }

@@ -93,16 +93,18 @@ namespace TowerDefense.Editor
         // ── 辅助方法 ─────────────────────────────────────────
 
         private static long PackCoord(int x, int y) => ((long)x << 32) | (uint)y;
+        private LevelConfig CurrentConfig => _currentAsset?.LevelConfig;
 
         private void RefreshPointSets()
         {
             _goalPointSet.Clear();
             _spawnPointSet.Clear();
-            if (_currentAsset?.goalPoints != null)
-                foreach (var gp in _currentAsset.goalPoints)
+            var config = CurrentConfig;
+            if (config?.GoalPoints != null)
+                foreach (var gp in config.GoalPoints)
                     _goalPointSet.Add(PackCoord(Mathf.FloorToInt(gp.x), Mathf.FloorToInt(gp.y)));
-            if (_currentAsset?.spawnPoints != null)
-                foreach (var sp in _currentAsset.spawnPoints)
+            if (config?.SpawnPoints != null)
+                foreach (var sp in config.SpawnPoints)
                     _spawnPointSet.Add(PackCoord(Mathf.FloorToInt(sp.x), Mathf.FloorToInt(sp.y)));
         }
 
@@ -148,32 +150,41 @@ namespace TowerDefense.Editor
                 return;
             }
 
+            var config = CurrentConfig;
+            if (config == null)
+            {
+                EditorGUILayout.HelpBox("Level Config 数据为空", MessageType.Error);
+                EditorGUILayout.EndVertical();
+                return;
+            }
+
             EditorGUILayout.Space(4);
 
             // ── 关卡信息行 ────
             EditorGUI.BeginChangeCheck();
-            _currentAsset.levelId = EditorGUILayout.TextField("Level ID", _currentAsset.levelId);
-            _currentAsset.displayName = EditorGUILayout.TextField("Display Name", _currentAsset.displayName);
+            config.LevelId = EditorGUILayout.TextField("Level ID", config.LevelId);
+            config.DisplayName = EditorGUILayout.TextField("Display Name", config.DisplayName);
 
             EditorGUILayout.BeginHorizontal();
-            int newWidth = EditorGUILayout.IntField("Width", _currentAsset.width);
-            int newHeight = EditorGUILayout.IntField("Height", _currentAsset.height);
+            int newWidth = EditorGUILayout.IntField("Width", config.Width);
+            int newHeight = EditorGUILayout.IntField("Height", config.Height);
             EditorGUILayout.EndHorizontal();
 
-            if (newWidth != _currentAsset.width || newHeight != _currentAsset.height)
+            if (newWidth != config.Width || newHeight != config.Height)
             {
                 Undo.RecordObject(_currentAsset, "Resize Grid");
-                _currentAsset.width = Mathf.Max(1, newWidth);
-                _currentAsset.height = Mathf.Max(1, newHeight);
+                config.Width = Mathf.Max(1, newWidth);
+                config.Height = Mathf.Max(1, newHeight);
                 _currentAsset.EnsureCellsArray();
                 _editorBakedDirections = null;
                 EditorUtility.SetDirty(_currentAsset);
             }
 
-            _currentAsset.cellSize = EditorGUILayout.FloatField("Cell Size", _currentAsset.cellSize);
+            config.CellSize = EditorGUILayout.FloatField("Cell Size", config.CellSize);
 
             if (EditorGUI.EndChangeCheck())
             {
+                _currentAsset.Save();
                 EditorUtility.SetDirty(_currentAsset);
             }
 
@@ -230,7 +241,7 @@ namespace TowerDefense.Editor
 
             EditorGUILayout.BeginHorizontal();
 
-            bool hasGoals = _currentAsset.goalPoints != null && _currentAsset.goalPoints.Length > 0;
+            bool hasGoals = config.GoalPoints != null && config.GoalPoints.Length > 0;
             EditorGUI.BeginDisabledGroup(!hasGoals);
             if (GUILayout.Button("Bake 流场", GUILayout.Height(24), GUILayout.Width(100)))
             {
@@ -288,10 +299,10 @@ namespace TowerDefense.Editor
 
             // ── 状态信息 ────
             EditorGUILayout.LabelField(
-                $"Grid: {_currentAsset.width}×{_currentAsset.height} | " +
+                $"Grid: {config.Width}×{config.Height} | " +
                 $"Hover: ({_hoverX}, {_hoverY}) | " +
-                $"Goals: {_currentAsset.goalPoints?.Length ?? 0} | " +
-                $"Spawns: {_currentAsset.spawnPoints?.Length ?? 0} | " +
+                $"Goals: {config.GoalPoints?.Length ?? 0} | " +
+                $"Spawns: {config.SpawnPoints?.Length ?? 0} | " +
                 $"Mode: {_brushMode}",
                 EditorStyles.miniLabel);
 
@@ -317,6 +328,8 @@ namespace TowerDefense.Editor
         private void DrawGrid()
         {
             if (_currentAsset == null) return;
+            var config = CurrentConfig;
+            if (config == null) return;
 
             _currentAsset.EnsureCellsArray();
 
@@ -330,18 +343,18 @@ namespace TowerDefense.Editor
 
             GUI.BeginClip(gridRect);
 
-            float totalWidth = _currentAsset.width * _cellDrawSize;
-            float totalHeight = _currentAsset.height * _cellDrawSize;
+            float totalWidth = config.Width * _cellDrawSize;
+            float totalHeight = config.Height * _cellDrawSize;
 
             float offsetX = (gridRect.width - totalWidth) * 0.5f + _panOffset.x;
             float offsetY = (gridRect.height - totalHeight) * 0.5f + _panOffset.y;
 
-            for (int y = 0; y < _currentAsset.height; y++)
+            for (int y = 0; y < config.Height; y++)
             {
-                for (int x = 0; x < _currentAsset.width; x++)
+                for (int x = 0; x < config.Width; x++)
                 {
                     float drawX = offsetX + x * _cellDrawSize;
-                    float drawY = offsetY + (_currentAsset.height - 1 - y) * _cellDrawSize;
+                    float drawY = offsetY + (config.Height - 1 - y) * _cellDrawSize;
 
                     var cellRect = new Rect(drawX, drawY, _cellDrawSize, _cellDrawSize);
 
@@ -369,7 +382,7 @@ namespace TowerDefense.Editor
                     // 流场方向指示
                     if (_showFlowField && _editorBakedDirections != null)
                     {
-                        int index = y * _currentAsset.width + x;
+                        int index = y * config.Width + x;
                         if (index < _editorBakedDirections.Length)
                             DrawFlowFieldIndicator(drawX, drawY, _cellDrawSize, _editorBakedDirections[index]);
                     }
@@ -398,7 +411,7 @@ namespace TowerDefense.Editor
             {
                 Vector2 localMouse = Event.current.mousePosition;
                 _hoverX = Mathf.FloorToInt((localMouse.x - offsetX) / _cellDrawSize);
-                _hoverY = _currentAsset.height - 1 - Mathf.FloorToInt((localMouse.y - offsetY) / _cellDrawSize);
+                _hoverY = config.Height - 1 - Mathf.FloorToInt((localMouse.y - offsetY) / _cellDrawSize);
                 Repaint();
             }
 
@@ -466,6 +479,8 @@ namespace TowerDefense.Editor
         private void HandleInput()
         {
             if (_currentAsset == null) return;
+            var config = CurrentConfig;
+            if (config == null) return;
 
             var e = Event.current;
 
@@ -500,8 +515,8 @@ namespace TowerDefense.Editor
             // 左键操作
             if (e.button == 0 && !_isPanning)
             {
-                bool isValidCoord = _hoverX >= 0 && _hoverX < _currentAsset.width &&
-                                    _hoverY >= 0 && _hoverY < _currentAsset.height;
+                bool isValidCoord = _hoverX >= 0 && _hoverX < config.Width &&
+                                    _hoverY >= 0 && _hoverY < config.Height;
 
                 if (e.type == EventType.MouseDown && isValidCoord)
                 {
@@ -579,15 +594,16 @@ namespace TowerDefense.Editor
 
         private void ToggleGoalPoint(int x, int y)
         {
-            var list = new List<Vector2>(_currentAsset.goalPoints ?? Array.Empty<Vector2>());
+            var list = new List<Vector2>(CurrentConfig.GoalPoints ?? Array.Empty<Vector2>());
             int idx = list.FindIndex(p => Mathf.FloorToInt(p.x) == x && Mathf.FloorToInt(p.y) == y);
 
             Undo.RecordObject(_currentAsset, "Toggle Goal Point");
             if (idx >= 0) list.RemoveAt(idx);
             else list.Add(new Vector2(x, y));
 
-            _currentAsset.goalPoints = list.ToArray();
+            CurrentConfig.GoalPoints = list.ToArray();
             EditorUtility.SetDirty(_currentAsset);
+            _currentAsset.Save();
             RefreshPointSets();
             GridSceneOverlay.SetActiveAsset(_currentAsset);
             Repaint();
@@ -595,15 +611,16 @@ namespace TowerDefense.Editor
 
         private void ToggleSpawnPoint(int x, int y)
         {
-            var list = new List<Vector2>(_currentAsset.spawnPoints ?? Array.Empty<Vector2>());
+            var list = new List<Vector2>(CurrentConfig.SpawnPoints ?? Array.Empty<Vector2>());
             int idx = list.FindIndex(p => Mathf.FloorToInt(p.x) == x && Mathf.FloorToInt(p.y) == y);
 
             Undo.RecordObject(_currentAsset, "Toggle Spawn Point");
             if (idx >= 0) list.RemoveAt(idx);
             else list.Add(new Vector2(x, y));
 
-            _currentAsset.spawnPoints = list.ToArray();
+            CurrentConfig.SpawnPoints = list.ToArray();
             EditorUtility.SetDirty(_currentAsset);
+            _currentAsset.Save();
             RefreshPointSets();
             GridSceneOverlay.SetActiveAsset(_currentAsset);
             Repaint();
@@ -614,7 +631,9 @@ namespace TowerDefense.Editor
         private void BakeFlowField()
         {
             if (_currentAsset == null) return;
-            if (_currentAsset.goalPoints == null || _currentAsset.goalPoints.Length == 0)
+            var config = CurrentConfig;
+            if (config == null) return;
+            if (config.GoalPoints == null || config.GoalPoints.Length == 0)
             {
                 EditorUtility.DisplayDialog("Flow Field Bake", "请先设置至少一个目标点", "OK");
                 return;
@@ -623,12 +642,12 @@ namespace TowerDefense.Editor
             _currentAsset.EnsureCellsArray();
 
             var goalList = new List<int2>();
-            for (int i = 0; i < _currentAsset.goalPoints.Length; i++)
+            for (int i = 0; i < config.GoalPoints.Length; i++)
             {
-                var gp = _currentAsset.goalPoints[i];
+                var gp = config.GoalPoints[i];
                 int gx = Mathf.FloorToInt(gp.x);
                 int gy = Mathf.FloorToInt(gp.y);
-                if (gx >= 0 && gx < _currentAsset.width && gy >= 0 && gy < _currentAsset.height)
+                if (gx >= 0 && gx < config.Width && gy >= 0 && gy < config.Height)
                     goalList.Add(new int2(gx, gy));
                 else
                     Debug.LogWarning($"[关卡编辑器] Goal point ({gp.x}, {gp.y}) out of bounds, skipped");
@@ -643,21 +662,22 @@ namespace TowerDefense.Editor
             try
             {
                 _editorBakedDirections = FlowFieldBaker.BakeInEditor(
-                    _currentAsset.cells, _currentAsset.width, _currentAsset.height,
+                    config.Cells, config.Width, config.Height,
                     goalList.ToArray());
                 _showFlowField = true;
 
                 GridSceneOverlay.SetFlowFieldData(
-                    _editorBakedDirections, _currentAsset.width, _currentAsset.height);
+                    _editorBakedDirections, config.Width, config.Height);
 
                 if (_saveBakeToConfig)
                 {
                     Undo.RecordObject(_currentAsset, "Save Baked Flow Field");
-                    _currentAsset.bakedFlowFieldDirections = (byte[])_editorBakedDirections.Clone();
+                    config.BakedFlowFieldDirections = (byte[])_editorBakedDirections.Clone();
                     var tempConfig = _currentAsset.ToLevelConfig();
-                    _currentAsset.bakedFlowFieldDataHash = tempConfig.ComputeFlowFieldDataHash();
-                    _currentAsset.bakedFlowFieldVersion = LevelConfig.FlowFieldAlgorithmVersion;
+                    config.BakedFlowFieldDataHash = tempConfig.ComputeFlowFieldDataHash();
+                    config.BakedFlowFieldVersion = LevelConfig.FlowFieldAlgorithmVersion;
                     EditorUtility.SetDirty(_currentAsset);
+                    _currentAsset.Save();
                     Debug.Log("[关卡编辑器] Flow field baked and saved to config");
                 }
                 else
@@ -715,7 +735,7 @@ namespace TowerDefense.Editor
             if (_currentAsset == null) return;
 
             var config = _currentAsset.ToLevelConfig();
-            string path = LevelConfigLoader.GetEditorFilePath(_currentAsset.levelId);
+            string path = LevelConfigLoader.GetEditorFilePath(CurrentConfig.LevelId);
             LevelConfigLoader.SaveToFile(config, path);
             AssetDatabase.Refresh();
             Debug.Log($"[关卡编辑器] Exported to: {path}");
@@ -726,7 +746,7 @@ namespace TowerDefense.Editor
             if (_currentAsset == null) return;
 
             var config = _currentAsset.ToLevelConfig();
-            string path = LevelConfigLoader.GetResourcesFilePath(_currentAsset.levelId);
+            string path = LevelConfigLoader.GetResourcesFilePath(CurrentConfig.LevelId);
             LevelConfigLoader.SaveToFile(config, path);
             AssetDatabase.Refresh();
             Debug.Log($"[关卡编辑器] Exported to Resources: {path}");

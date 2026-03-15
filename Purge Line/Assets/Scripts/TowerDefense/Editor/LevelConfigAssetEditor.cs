@@ -33,9 +33,27 @@ namespace TowerDefense.Editor
 
         public override void OnInspectorGUI()
         {
-            serializedObject.Update();
+            var levelConfig = _asset.LevelConfig;
 
-            DrawDefaultInspector();
+            EditorGUI.BeginChangeCheck();
+            levelConfig.LevelId = EditorGUILayout.TextField("Level ID", levelConfig.LevelId);
+            levelConfig.DisplayName = EditorGUILayout.TextField("Display Name", levelConfig.DisplayName);
+            levelConfig.Description = EditorGUILayout.TextField("Description", levelConfig.Description);
+            levelConfig.Version = EditorGUILayout.IntField("Version", levelConfig.Version);
+
+            EditorGUILayout.Space(4);
+            levelConfig.Width = EditorGUILayout.IntSlider("Width", levelConfig.Width, 1, 500);
+            levelConfig.Height = EditorGUILayout.IntSlider("Height", levelConfig.Height, 1, 500);
+            levelConfig.CellSize = EditorGUILayout.Slider("Cell Size", levelConfig.CellSize, 0.1f, 10f);
+            levelConfig.OriginX = EditorGUILayout.FloatField("Origin X", levelConfig.OriginX);
+            levelConfig.OriginY = EditorGUILayout.FloatField("Origin Y", levelConfig.OriginY);
+
+            if (EditorGUI.EndChangeCheck())
+            {
+                Undo.RecordObject(_asset, "Edit Level Config Asset");
+                _asset.EnsureCellsArray();
+                _asset.Save();
+            }
 
             EditorGUILayout.Space(8);
             EditorGUILayout.LabelField("Statistics", EditorStyles.boldLabel);
@@ -44,9 +62,9 @@ namespace TowerDefense.Editor
 
             // 统计各类型格子数量
             int noneCount = 0, solidCount = 0, walkableCount = 0, placeableCount = 0, compositeCount = 0;
-            for (int i = 0; i < _asset.cells.Length; i++)
+            for (int i = 0; i < levelConfig.Cells.Length; i++)
             {
-                var ct = (CellType)_asset.cells[i];
+                var ct = (CellType)levelConfig.Cells[i];
                 switch (ct)
                 {
                     case CellType.None: noneCount++; break;
@@ -57,7 +75,9 @@ namespace TowerDefense.Editor
                 }
             }
 
-            EditorGUILayout.LabelField($"Total Cells: {_asset.cells.Length}");
+            EditorGUILayout.LabelField($"Total Cells: {levelConfig.Cells.Length}");
+            EditorGUILayout.LabelField($"Goal Points: {levelConfig.GoalPoints?.Length ?? 0} (在 GridEditor 中编辑)");
+            EditorGUILayout.LabelField($"Spawn Points: {levelConfig.SpawnPoints?.Length ?? 0} (在 GridEditor 中编辑)");
             EditorGUILayout.LabelField($"None: {noneCount} | Solid: {solidCount} | Walkable: {walkableCount}");
             EditorGUILayout.LabelField($"Placeable: {placeableCount} | Composite: {compositeCount}");
 
@@ -86,18 +106,18 @@ namespace TowerDefense.Editor
 
             if (GUILayout.Button("Export to Data", GUILayout.Height(24)))
             {
-                var config = _asset.ToLevelConfig();
-                string path = LevelConfigLoader.GetEditorFilePath(_asset.levelId);
-                LevelConfigLoader.SaveToFile(config, path);
+                var exportConfig = _asset.ToLevelConfig();
+                string path = LevelConfigLoader.GetEditorFilePath(_asset.LevelConfig.LevelId);
+                LevelConfigLoader.SaveToFile(exportConfig, path);
                 AssetDatabase.Refresh();
                 Debug.Log($"Exported to: {path}");
             }
 
             if (GUILayout.Button("Export to Resources", GUILayout.Height(24)))
             {
-                var config = _asset.ToLevelConfig();
-                string path = LevelConfigLoader.GetResourcesFilePath(_asset.levelId);
-                LevelConfigLoader.SaveToFile(config, path);
+                var exportConfig = _asset.ToLevelConfig();
+                string path = LevelConfigLoader.GetResourcesFilePath(_asset.LevelConfig.LevelId);
+                LevelConfigLoader.SaveToFile(exportConfig, path);
                 AssetDatabase.Refresh();
                 Debug.Log($"Exported to Resources: {path}");
             }
@@ -110,8 +130,6 @@ namespace TowerDefense.Editor
             {
                 EditorGUILayout.HelpBox($"Validation Error: {error}", MessageType.Error);
             }
-
-            serializedObject.ApplyModifiedProperties();
         }
     }
 }

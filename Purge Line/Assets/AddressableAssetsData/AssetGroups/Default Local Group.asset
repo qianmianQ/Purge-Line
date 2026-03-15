@@ -17,6 +17,11 @@ MonoBehaviour:
     m_SerializedData: []
   m_GUID: ae553f3f6957d45b0b252b2aaa48ea02
   m_SerializeEntries:
+  - m_GUID: 3a417a70255be407ea0a0db06ad1f4ef
+    m_Address: td/entity/enemy/new_entity
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 3eb41205785a74bf899c20156c584295
     m_Address: Assets/Prefabs/UI/Scene UI/ui tip.prefab
     m_ReadOnly: 0
@@ -32,13 +37,43 @@ MonoBehaviour:
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 87fd5e557ebed4b01983ffbb8353f3d6
+    m_Address: td/entity/projectile/new_entity
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 9a374fa8501fc48eba648268f5aabe29
+    m_Address: td/entity/enemy/enemy_new_entity
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 9e3a27eef7c124bdd86e20d45bb57ae3
+    m_Address: td/entity/projectile/projectile_new_entity
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: bb7b740026ebb4f469101d6b2b50dab4
     m_Address: Assets/Prefabs/Gameplay/Bullet.prefab
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: d29cb6180ba4e43fba5d3ed835caa2a7
+    m_Address: td/entity/turret/nomal
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: de7f65bd42c59456ab9d026ac4b475d8
+    m_Address: td/entity/turret/new_entity
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: eed809c01a99443eead895c62a0c2c91
     m_Address: Assets/Data/Levels/level_01.bytes
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: fdde885ce636f420eb158638afb24258
+    m_Address: td/entity/index
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0

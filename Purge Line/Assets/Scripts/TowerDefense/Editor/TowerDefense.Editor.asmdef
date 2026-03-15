@@ -3,6 +3,7 @@
     "rootNamespace": "TowerDefense.Editor",
     "references": [
         "TowerDefense",
+        "Unity.Addressables.Editor",
         "Unity.Entities",
         "Unity.Collections",
         "Unity.Mathematics",

@@ -33,6 +33,7 @@ namespace TowerDefense.Editor.Blueprint
         private Label _metaStatusLabel;
         private ListView _consoleList;
         private TwoPaneSplitView _splitView;
+        private TextField _blueprintNameField;
 
         private double _lastAutoSaveAt;
         private string _searchKeyword = string.Empty;
@@ -44,6 +45,18 @@ namespace TowerDefense.Editor.Blueprint
             var window = GetWindow<EntityBlueprintEditorWindow>("Entity Blueprint");
             window.minSize = new Vector2(980f, 640f);
             window.Show();
+        }
+
+        public static void OpenAndLoad(string absolutePath)
+        {
+            var window = GetWindow<EntityBlueprintEditorWindow>("Entity Blueprint");
+            window.minSize = new Vector2(980f, 640f);
+            window.Show();
+            EditorApplication.delayCall += () =>
+            {
+                if (window != null)
+                    window.OpenFile(absolutePath);
+            };
         }
 
         private void OnEnable()
@@ -94,6 +107,13 @@ namespace TowerDefense.Editor.Blueprint
 
             toolbar.Add(CreateToolbarButton("Open", OpenFile));
             toolbar.Add(CreateToolbarButton("Save", SaveFile));
+            _blueprintNameField = new TextField("Blueprint Name")
+            {
+                value = _state.CurrentDocument.blueprintName
+            };
+            _blueprintNameField.style.minWidth = 240f;
+            toolbar.Add(_blueprintNameField);
+            toolbar.Add(CreateToolbarButton("Apply Name", RenameBlueprint));
             toolbar.Add(CreateToolbarButton("Create Instance", CreateInstance));
             toolbar.Add(CreateToolbarButton("Run Test", RunQuickTest));
             toolbar.Add(CreateToolbarButton("Deserialize Test", TestDeserialize));
@@ -169,6 +189,12 @@ namespace TowerDefense.Editor.Blueprint
                 RefreshLibrary();
             });
             root.Add(_searchField);
+
+            var libraryActions = new VisualElement();
+            libraryActions.style.flexDirection = FlexDirection.Row;
+            libraryActions.Add(new Button(() => SetLibraryFoldouts(true)) { text = "Expand All" });
+            libraryActions.Add(new Button(() => SetLibraryFoldouts(false)) { text = "Collapse All" });
+            root.Add(libraryActions);
 
             _libraryRoot = new ScrollView();
             _libraryRoot.style.flexGrow = 1f;
@@ -326,6 +352,17 @@ namespace TowerDefense.Editor.Blueprint
             }
         }
 
+        private void SetLibraryFoldouts(bool expanded)
+        {
+            if (_libraryRoot == null)
+                return;
+
+            foreach (var foldout in _libraryRoot.Query<Foldout>().ToList())
+            {
+                foldout.value = expanded;
+            }
+        }
+
         private VisualElement BuildComponentLibraryRow(ComponentTypeInfo component)
         {
             var row = new VisualElement();
@@ -424,6 +461,8 @@ namespace TowerDefense.Editor.Blueprint
             string saveState = _state.IsDirty ? "Unsaved" : "Saved";
             _statusLabel.text = $"File: {path}";
             _metaStatusLabel.text = $"State: {saveState} | Components: {_state.CurrentDocument.components.Count}";
+            if (_blueprintNameField != null)
+                _blueprintNameField.value = _state.CurrentDocument.blueprintName;
         }
 
         private void OpenFile()
@@ -485,6 +524,38 @@ namespace TowerDefense.Editor.Blueprint
             {
                 Log($"Save failed: {ex.Message}");
             }
+        }
+
+        private void RenameBlueprint()
+        {
+            string newName = _blueprintNameField?.value?.Trim();
+            if (string.IsNullOrWhiteSpace(newName))
+            {
+                Log("Rename failed: blueprint name is empty.");
+                return;
+            }
+
+            string currentName = _state.CurrentDocument.blueprintName;
+            if (string.Equals(currentName, newName, StringComparison.Ordinal))
+            {
+                Log("Blueprint name unchanged.");
+                return;
+            }
+
+            _state.CurrentDocument.blueprintName = newName;
+
+            if (!string.IsNullOrWhiteSpace(_state.CurrentFilePath))
+            {
+                string dir = Path.GetDirectoryName(_state.CurrentFilePath);
+                string newPath = Path.Combine(dir ?? string.Empty, $"{newName}.{DefaultExtension}");
+                SaveFile(newPath);
+            }
+            else
+            {
+                MarkDirtyAndRefreshStatus();
+            }
+
+            Log($"Blueprint renamed to {newName}");
         }
 
         private void CreateInstance()

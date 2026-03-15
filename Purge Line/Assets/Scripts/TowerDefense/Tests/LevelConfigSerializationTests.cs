@@ -381,6 +381,71 @@ namespace TowerDefense.Tests
             var result = LevelConfigLoader.LoadFromBytes(Array.Empty<byte>());
             Assert.IsNull(result);
         }
+
+        // ── 兼容性 ──────────────────────────────────────────
+
+        [Test]
+        public void Compatibility_OldDataToNewType_BackwardCompatible()
+        {
+            var legacy = new LevelConfigLegacyV1
+            {
+                LevelId = "legacy_v1",
+                Version = 1,
+                Width = 6,
+                Height = 4,
+                CellSize = 1.25f,
+                OriginX = 2f,
+                OriginY = 3f,
+                Cells = new byte[24],
+                SpawnPoints = new[] { new Vector2(0, 0) },
+                GoalPoints = new[] { new Vector2(5, 3) },
+                DisplayName = "Legacy",
+                Description = "legacy payload"
+            };
+            legacy.Cells[7] = (byte)CellType.Placeable;
+
+            byte[] payload = MemoryPackSerializer.Serialize(legacy);
+            var upgraded = MemoryPackSerializer.Deserialize<LevelConfig>(payload);
+
+            Assert.IsNotNull(upgraded);
+            Assert.AreEqual(legacy.LevelId, upgraded.LevelId);
+            Assert.AreEqual(legacy.Width, upgraded.Width);
+            Assert.AreEqual(legacy.Height, upgraded.Height);
+            Assert.AreEqual(legacy.CellSize, upgraded.CellSize, 0.001f);
+            Assert.AreEqual(legacy.Cells[7], upgraded.Cells[7]);
+            Assert.AreEqual(0, upgraded.BakedFlowFieldVersion);
+            Assert.AreEqual(0u, upgraded.BakedFlowFieldDataHash);
+            Assert.IsNull(upgraded.BakedFlowFieldDirections);
+            Assert.IsTrue(upgraded.Validate(out _));
+        }
+
+        [Test]
+        public void Compatibility_NewDataToOldType_ForwardCompatible()
+        {
+            var latest = LevelConfig.CreateEmpty("latest_v2", 7, 5, 0.9f, CellType.Walkable);
+            latest.OriginX = 10f;
+            latest.OriginY = -2f;
+            latest.DisplayName = "Latest";
+            latest.Description = "new payload";
+            latest.SpawnPoints = new[] { new Vector2(1, 1), new Vector2(2, 1) };
+            latest.GoalPoints = new[] { new Vector2(6, 4) };
+            latest.BakedFlowFieldDirections = new byte[35];
+            latest.BakedFlowFieldDataHash = 123456u;
+            latest.BakedFlowFieldVersion = LevelConfig.FlowFieldAlgorithmVersion;
+
+            byte[] payload = MemoryPackSerializer.Serialize(latest);
+            var downgraded = MemoryPackSerializer.Deserialize<LevelConfigLegacyV1>(payload);
+
+            Assert.IsNotNull(downgraded);
+            Assert.AreEqual(latest.LevelId, downgraded.LevelId);
+            Assert.AreEqual(latest.Width, downgraded.Width);
+            Assert.AreEqual(latest.Height, downgraded.Height);
+            Assert.AreEqual(latest.OriginX, downgraded.OriginX, 0.001f);
+            Assert.AreEqual(latest.OriginY, downgraded.OriginY, 0.001f);
+            Assert.AreEqual(latest.Cells.Length, downgraded.Cells.Length);
+            Assert.AreEqual(latest.GoalPoints[0], downgraded.GoalPoints[0]);
+            Assert.AreEqual(latest.SpawnPoints.Length, downgraded.SpawnPoints.Length);
+        }
     }
 }
 

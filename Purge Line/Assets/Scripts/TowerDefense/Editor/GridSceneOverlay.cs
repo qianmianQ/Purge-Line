@@ -78,14 +78,16 @@ namespace TowerDefense.Editor
         private static void OnSceneGUI(SceneView sceneView)
         {
             if (!_isEnabled || _activeAsset == null) return;
+            var config = _activeAsset.LevelConfig;
+            if (config == null) return;
 
             _activeAsset.EnsureCellsArray();
 
-            float cellSize = _activeAsset.cellSize;
-            float originX = _activeAsset.originX;
-            float originY = _activeAsset.originY;
-            int width = _activeAsset.width;
-            int height = _activeAsset.height;
+            float cellSize = config.CellSize;
+            float originX = config.OriginX;
+            float originY = config.OriginY;
+            int width = config.Width;
+            int height = config.Height;
 
             Handles.zTest = UnityEngine.Rendering.CompareFunction.Always;
 
@@ -94,7 +96,7 @@ namespace TowerDefense.Editor
             {
                 for (int x = 0; x < width; x++)
                 {
-                    var cellType = _activeAsset.GetCellType(x, y);
+                    var cellType = config.GetCellType(x, y);
                     Color color = GetColor(cellType);
 
                     Vector3 bottomLeft = new Vector3(
@@ -126,9 +128,9 @@ namespace TowerDefense.Editor
             }
 
             // 绘制目标点标记
-            if (_activeAsset.goalPoints != null)
+            if (config.GoalPoints != null)
             {
-                foreach (var gp in _activeAsset.goalPoints)
+                foreach (var gp in config.GoalPoints)
                 {
                     int gx = Mathf.FloorToInt(gp.x);
                     int gy = Mathf.FloorToInt(gp.y);
@@ -138,9 +140,9 @@ namespace TowerDefense.Editor
             }
 
             // 绘制出生点标记
-            if (_activeAsset.spawnPoints != null)
+            if (config.SpawnPoints != null)
             {
-                foreach (var sp in _activeAsset.spawnPoints)
+                foreach (var sp in config.SpawnPoints)
                 {
                     int sx = Mathf.FloorToInt(sp.x);
                     int sy = Mathf.FloorToInt(sp.y);

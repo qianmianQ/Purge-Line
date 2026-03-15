@@ -17,33 +17,72 @@ namespace TowerDefense.Data
     /// 版本兼容：
     ///   Version 字段用于数据迁移，新版本需要保持向下兼容
     /// </summary>
-    [MemoryPackable]
+    [MemoryPackable(GenerateType.VersionTolerant)]
     public partial class LevelConfig
     {
+        private enum FieldOrder : ushort
+        {
+            // 基础元数据
+            LevelId = 0,
+            Version = 1,
+
+            // 网格数据（与元数据分段，预留扩展空间）
+            Width = 50,
+            Height = 51,
+            CellSize = 52,
+            OriginX = 53,
+            OriginY = 54,
+            Cells = 55,
+
+            // 路径点
+            SpawnPoints = 100,
+            GoalPoints = 101,
+
+            // 展示信息
+            DisplayName = 150,
+            Description = 151,
+
+            // 预烘焙流场
+            BakedFlowFieldDirections = 200,
+            BakedFlowFieldDataHash = 201,
+            BakedFlowFieldVersion = 202
+        }
+
         /// <summary>当前流场算法版本，变更时递增以使旧烘焙数据失效</summary>
+        [MemoryPackIgnore]
         public const int FlowFieldAlgorithmVersion = 1;
 
+        [MemoryPackOrder((ushort)FieldOrder.LevelId)]
+        [SuppressDefaultInitialization]
         /// <summary>关卡唯一标识符</summary>
         public string LevelId { get; set; }
 
+        [MemoryPackOrder((ushort)FieldOrder.Version)]
         /// <summary>配置版本号（用于数据迁移）</summary>
         public int Version { get; set; }
 
+        [MemoryPackOrder((ushort)FieldOrder.Width)]
         /// <summary>地图宽度（格子数）</summary>
         public int Width { get; set; }
 
+        [MemoryPackOrder((ushort)FieldOrder.Height)]
         /// <summary>地图高度（格子数）</summary>
         public int Height { get; set; }
 
+        [MemoryPackOrder((ushort)FieldOrder.CellSize)]
         /// <summary>单个格子的世界尺寸（正方形边长）</summary>
         public float CellSize { get; set; }
 
+        [MemoryPackOrder((ushort)FieldOrder.OriginX)]
         /// <summary>地图原点 X 坐标（世界空间，左下角）</summary>
         public float OriginX { get; set; }
 
+        [MemoryPackOrder((ushort)FieldOrder.OriginY)]
         /// <summary>地图原点 Y 坐标（世界空间，左下角）</summary>
         public float OriginY { get; set; }
 
+        [MemoryPackOrder((ushort)FieldOrder.Cells)]
+        [SuppressDefaultInitialization]
         /// <summary>
         /// 扁平化格子类型数组。
         /// 长度 = Width * Height，索引 = y * Width + x。
@@ -51,26 +90,38 @@ namespace TowerDefense.Data
         /// </summary>
         public byte[] Cells { get; set; }
 
+        [MemoryPackOrder((ushort)FieldOrder.SpawnPoints)]
+        [SuppressDefaultInitialization]
         /// <summary>敌人出生点（格子坐标，x=列 y=行）</summary>
         public Vector2[] SpawnPoints { get; set; }
 
+        [MemoryPackOrder((ushort)FieldOrder.GoalPoints)]
+        [SuppressDefaultInitialization]
         /// <summary>目标点（格子坐标，x=列 y=行）</summary>
         public Vector2[] GoalPoints { get; set; }
 
+        [MemoryPackOrder((ushort)FieldOrder.DisplayName)]
+        [SuppressDefaultInitialization]
         /// <summary>关卡显示名称（可选）</summary>
         public string DisplayName { get; set; }
 
+        [MemoryPackOrder((ushort)FieldOrder.Description)]
+        [SuppressDefaultInitialization]
         /// <summary>关卡描述（可选）</summary>
         public string Description { get; set; }
 
         // ── 预烘焙流场（可选持久化）───────────────────────────
 
+        [MemoryPackOrder((ushort)FieldOrder.BakedFlowFieldDirections)]
+        [SuppressDefaultInitialization]
         /// <summary>预烘焙的流场方向数据（每格一个byte，0-7=方向，255=无方向）</summary>
         public byte[] BakedFlowFieldDirections { get; set; }
 
+        [MemoryPackOrder((ushort)FieldOrder.BakedFlowFieldDataHash)]
         /// <summary>烘焙时的网格+目标点数据哈希（用于失效校验）</summary>
         public uint BakedFlowFieldDataHash { get; set; }
 
+        [MemoryPackOrder((ushort)FieldOrder.BakedFlowFieldVersion)]
         /// <summary>烘焙时的算法版本号</summary>
         public int BakedFlowFieldVersion { get; set; }
 
@@ -118,6 +169,7 @@ namespace TowerDefense.Data
         // ── 便捷方法 ─────────────────────────────────────────
 
         /// <summary>格子总数</summary>
+        [MemoryPackIgnore]
         public int CellCount => Width * Height;
 
         /// <summary>
@@ -172,6 +224,11 @@ namespace TowerDefense.Data
                 error = $"Cells array length mismatch: expected {Width * Height}, got {Cells?.Length ?? 0}";
                 return false;
             }
+
+            SpawnPoints ??= Array.Empty<Vector2>();
+            GoalPoints ??= Array.Empty<Vector2>();
+            DisplayName ??= LevelId;
+            Description ??= string.Empty;
 
             error = null;
             return true;
